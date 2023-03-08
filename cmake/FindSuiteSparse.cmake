@@ -90,6 +90,8 @@ Optional SuiteSparse dependencies:
     Serial Graph Partitioning and Fill-reducing Matrix Ordering (METIS)
 ]=======================================================================]
 
+message(STATUS "FindSuiteSparse:93  CUSTOM_SUITESPARSE_FOLDER \"${CUSTOM_SUITESPARSE_FOLDER}\"\nCUSTOM_SUITESPARSE_FOLDER_INCLUDE \"${CUSTOM_SUITESPARSE_FOLDER_INCLUDE}\"\nCUSTOM_SUITESPARSE_FOLDER_LIB \"${CUSTOM_SUITESPARSE_FOLDER_LIB}\"")
+
 if (NOT SuiteSparse_NO_CMAKE)
   find_package (SuiteSparse NO_MODULE QUIET)
 endif (NOT SuiteSparse_NO_CMAKE)
@@ -213,9 +215,35 @@ macro(suitesparse_find_component COMPONENT)
 
   set(SuiteSparse_${COMPONENT}_FOUND TRUE)
   if (SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES)
-    find_path(SuiteSparse_${COMPONENT}_INCLUDE_DIR
-      NAMES ${SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES}
-      PATH_SUFFIXES ${SuiteSparse_CHECK_PATH_SUFFIXES})
+    if(CUSTOM_SUITESPARSE_FOLDER_INCLUDE AND NOT "${CUSTOM_SUITESPARSE_FOLDER_INCLUDE}" STREQUAL "CUSTOM_SUITESPARSE_FOLDER_INCLUDE_NOT_SET")
+      unset(SuiteSparse_${COMPONENT}_INCLUDE_DIR CACHE)
+#      message(STATUS "For SuiteSparse::${COMPONENT} try to find include folder in: \"${CUSTOM_SUITESPARSE_FOLDER_INCLUDE}\" for file \"${SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES}\"")
+      list(LENGTH SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES_NUM)
+      if(SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES_NUM GREATER 1)
+        find_path(    SuiteSparse_${COMPONENT}_INCLUDE_DIR
+                      NAMES ${SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES}
+                      PATHS "${CUSTOM_SUITESPARSE_FOLDER_INCLUDE}"
+                      NO_DEFAULT_PATH)
+      else()
+        find_path(    SuiteSparse_${COMPONENT}_INCLUDE_DIR
+                        ${SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES}
+                        PATHS "${CUSTOM_SUITESPARSE_FOLDER_INCLUDE}" 
+                        NO_DEFAULT_PATH
+                        )
+        #find_file(  SuiteSparse_${COMPONENT}_INCLUDE_DIR_FULL_PATH
+        #            ${SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES}
+        #            PATHS "${CUSTOM_SUITESPARSE_FOLDER_INCLUDE}" 
+        #            NO_DEFAULT_PATH)
+        #message(STATUS "Component ${COMPONENT} \"${SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES}\"  \"${SuiteSparse_${COMPONENT}_INCLUDE_DIR_FULL_PATH}\" SuiteSparse_${COMPONENT}_INCLUDE_DIR \"${SuiteSparse_${COMPONENT}_INCLUDE_DIR}\"")
+      endif()
+      
+#      message(STATUS "For SuiteSparse::${COMPONENT} folder found in \"${SuiteSparse_${COMPONENT}_INCLUDE_DIR}\"")
+    else()
+      find_path(SuiteSparse_${COMPONENT}_INCLUDE_DIR
+        NAMES ${SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES}
+        PATH_SUFFIXES ${SuiteSparse_CHECK_PATH_SUFFIXES})
+    endif()
+#    message(STATUS "For SuiteSparse::${COMPONENT} include: \"${SuiteSparse_${COMPONENT}_INCLUDE_DIR}\"")
     if (SuiteSparse_${COMPONENT}_INCLUDE_DIR)
       message(STATUS "Found ${COMPONENT} headers in: "
         "${SuiteSparse_${COMPONENT}_INCLUDE_DIR}")
@@ -236,9 +264,28 @@ macro(suitesparse_find_component COMPONENT)
   endif()
 
   if (SuiteSparse_FIND_COMPONENT_${COMPONENT}_LIBRARIES)
-    find_library(SuiteSparse_${COMPONENT}_LIBRARY
-      NAMES ${SuiteSparse_FIND_COMPONENT_${COMPONENT}_LIBRARIES}
-      PATH_SUFFIXES ${SuiteSparse_CHECK_PATH_SUFFIXES})
+
+    if(CUSTOM_SUITESPARSE_FOLDER_LIB AND NOT "${CUSTOM_SUITESPARSE_FOLDER_LIB}" STREQUAL "CUSTOM_SUITESPARSE_FOLDER_LIB_NOT_SET")
+        unset(SuiteSparse_${COMPONENT}_LIBRARY CACHE)
+        list(LENGTH SuiteSparse_FIND_COMPONENT_${COMPONENT}_LIBRARIES SuiteSparse_FIND_COMPONENT_${COMPONENT}_LIBRARIES_NUM)
+        if(SuiteSparse_FIND_COMPONENT_${COMPONENT}_LIBRARIES_NUM GREATER 1)
+            find_library(   SuiteSparse_${COMPONENT}_LIBRARY
+                            NAMES ${SuiteSparse_FIND_COMPONENT_${COMPONENT}_LIBRARIES}
+                            PATHS "${CUSTOM_SUITESPARSE_FOLDER_LIB}"
+                            NO_DEFAULT_PATH)
+        else()
+            find_library(   SuiteSparse_${COMPONENT}_LIBRARY
+                            ${SuiteSparse_FIND_COMPONENT_${COMPONENT}_LIBRARIES}
+                            PATHS "${CUSTOM_SUITESPARSE_FOLDER_LIB}"
+                            NO_DEFAULT_PATH)
+        #message(STATUS "Component ${COMPONENT} \"${SuiteSparse_FIND_COMPONENT_${COMPONENT}_FILES}\"  \"${SuiteSparse_${COMPONENT}_INCLUDE_DIR_FULL_PATH}\" SuiteSparse_${COMPONENT}_INCLUDE_DIR \"${SuiteSparse_${COMPONENT}_INCLUDE_DIR}\"")
+        endif()
+    else()
+        find_library(SuiteSparse_${COMPONENT}_LIBRARY
+          NAMES ${SuiteSparse_FIND_COMPONENT_${COMPONENT}_LIBRARIES}
+          PATH_SUFFIXES ${SuiteSparse_CHECK_PATH_SUFFIXES})
+    endif()
+
     if (SuiteSparse_${COMPONENT}_LIBRARY)
       message(STATUS "Found ${COMPONENT} library: ${SuiteSparse_${COMPONENT}_LIBRARY}")
       mark_as_advanced(SuiteSparse_${COMPONENT}_LIBRARY)
@@ -394,19 +441,19 @@ if (TARGET SuiteSparse::Config)
   else (NOT EXISTS ${SuiteSparse_VERSION_FILE})
     file(READ ${SuiteSparse_VERSION_FILE} Config_CONTENTS)
 
-    string(REGEX MATCH "#define SUITESPARSE_MAIN_VERSION [0-9]+"
+    string(REGEX MATCH "#define SUITESPARSE_MAIN_VERSION[ ]+[0-9]+"
       SuiteSparse_VERSION_MAJOR "${Config_CONTENTS}")
-    string(REGEX REPLACE "#define SUITESPARSE_MAIN_VERSION ([0-9]+)" "\\1"
+    string(REGEX REPLACE "#define SUITESPARSE_MAIN_VERSION[ ]+([0-9]+)" "\\1"
       SuiteSparse_VERSION_MAJOR "${SuiteSparse_VERSION_MAJOR}")
 
-    string(REGEX MATCH "#define SUITESPARSE_SUB_VERSION [0-9]+"
+    string(REGEX MATCH "#define SUITESPARSE_SUB_VERSION[ ]+[0-9]+"
       SuiteSparse_VERSION_MINOR "${Config_CONTENTS}")
-    string(REGEX REPLACE "#define SUITESPARSE_SUB_VERSION ([0-9]+)" "\\1"
+    string(REGEX REPLACE "#define SUITESPARSE_SUB_VERSION[ ]+([0-9]+)" "\\1"
       SuiteSparse_VERSION_MINOR "${SuiteSparse_VERSION_MINOR}")
 
-    string(REGEX MATCH "#define SUITESPARSE_SUBSUB_VERSION [0-9]+"
+    string(REGEX MATCH "#define SUITESPARSE_SUBSUB_VERSION[ ]+[0-9]+"
       SuiteSparse_VERSION_PATCH "${Config_CONTENTS}")
-    string(REGEX REPLACE "#define SUITESPARSE_SUBSUB_VERSION ([0-9]+)" "\\1"
+    string(REGEX REPLACE "#define SUITESPARSE_SUBSUB_VERSION[ ]+([0-9]+)" "\\1"
       SuiteSparse_VERSION_PATCH "${SuiteSparse_VERSION_PATCH}")
 
     # This is on a single line s/t CMake does not interpret it as a list of

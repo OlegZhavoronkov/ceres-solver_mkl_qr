@@ -142,9 +142,17 @@ list(APPEND CXSparse_CHECK_PATH_SUFFIXES
   suitesparse) # Linux/Windows
 
 # Search supplied hint directories first if supplied.
-find_path(CXSparse_INCLUDE_DIR
-  NAMES cs.h
-  PATH_SUFFIXES ${CXSparse_CHECK_PATH_SUFFIXES})
+if(CUSTOM_SUITESPARSE_FOLDER_INCLUDE AND NOT "${CUSTOM_SUITESPARSE_FOLDER_INCLUDE}" STREQUAL "CUSTOM_SUITESPARSE_FOLDER_INCLUDE_NOT_SET")
+    unset(CXSparse_INCLUDE_DIR CACHE)
+    find_path(  CXSparse_INCLUDE_DIR
+                NAMES cs.h
+                PATHS "${CUSTOM_SUITESPARSE_FOLDER_INCLUDE}"
+                NO_DEFAULT_PATH)
+else()
+    find_path(CXSparse_INCLUDE_DIR
+      NAMES cs.h
+      PATH_SUFFIXES ${CXSparse_CHECK_PATH_SUFFIXES})
+endif()
 if (NOT CXSparse_INCLUDE_DIR OR
     NOT EXISTS ${CXSparse_INCLUDE_DIR})
   cxsparse_report_not_found(
@@ -153,9 +161,17 @@ if (NOT CXSparse_INCLUDE_DIR OR
 endif (NOT CXSparse_INCLUDE_DIR OR
        NOT EXISTS ${CXSparse_INCLUDE_DIR})
 
-find_library(CXSparse_LIBRARY NAMES cxsparse
-  PATH_SUFFIXES ${CXSparse_CHECK_PATH_SUFFIXES})
-
+if(CUSTOM_SUITESPARSE_FOLDER_LIB AND NOT "${CUSTOM_SUITESPARSE_FOLDER_LIB}" STREQUAL "CUSTOM_SUITESPARSE_FOLDER_LIB_NOT_SET")
+    unset(CXSparse_LIBRARY CACHE)
+    find_library(   CXSparse_LIBRARY 
+                    NAMES cxsparse
+                    PATHS ${CUSTOM_SUITESPARSE_FOLDER_LIB}
+                    NO_DEFAULT_PATH)
+    message(STATUS "searching for library \"cxsparse\" in folder \"${CUSTOM_SUITESPARSE_FOLDER_LIB}\" found with path \"${CXSparse_LIBRARY}\"")
+else()
+    find_library(CXSparse_LIBRARY NAMES cxsparse
+      PATH_SUFFIXES ${CXSparse_CHECK_PATH_SUFFIXES})
+endif()
 if (NOT CXSparse_LIBRARY OR
     NOT EXISTS ${CXSparse_LIBRARY})
   cxsparse_report_not_found(
