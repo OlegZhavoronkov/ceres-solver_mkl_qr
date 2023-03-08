@@ -26,3 +26,4 @@ bazel-*
 .vscode/*
 cmake-build
 small-blas-benchmarks
+.vscode/*
