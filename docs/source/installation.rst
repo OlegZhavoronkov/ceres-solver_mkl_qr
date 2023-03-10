@@ -800,7 +800,7 @@ used:
 
     # helloworld
     add_executable(helloworld helloworld.cc)
-    target_link_libraries(helloworld Ceres::ceres)
+    target_link_libraries(helloworld Ceres::ceres SuiteSparse::CHOLMOD)
 
 Irrespective of whether Ceres was installed or exported, if multiple
 versions are detected, set: ``Ceres_DIR`` to control which is used.
