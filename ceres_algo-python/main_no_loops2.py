@@ -203,12 +203,23 @@ def J(x):
     # predicted_y = focal*yp + focal*yp*l1*(xp**2 + yp**2) + focal*yp*l2*(xp**2 + yp**2)**2
     # predicted_x = focal*(xp) + focal*l1*(xp**3) + focal*l1*(xp)*(yp**2) + focal*l2*(xp**5) + 2*focal*l2*(xp**3)*(yp**2) + focal*l2*(xp)*(yp**4)
     # predicted_y = focal*(yp) + focal*(yp)*l1*(xp**2) + focal*l1*(yp**3) + focal*(yp)*l2*(xp**4) + 2*focal*l2*(xp**2)*(yp**3) + focal*l2*(yp**5)
-    
-    J = np.zeros((2, 2))
-    J[0, 0] = focal + 3*focal*l1*(xp**2) + focal*l1*(yp**2) + 5*focal*l2*(xp**4) + 6*focal*l2*(xp**2)*(yp**2) + focal*l2*(yp**4)
-    J[0, 1] = 2*focal*l1*(xp)*(yp) + 4*focal*l2*(xp**3)*(yp) + 4*focal*l2*(xp)*(yp**3)
-    J[1, 0] = 2*focal*(yp)*l1*(xp) + 4*focal*(yp)*l2*(xp**3) + 4*focal*l2*(xp)*(yp**3)
-    J[1, 1] = focal + 3*focal*l1*(xp**2) + focal*l1*(yp**2) + 5*focal*l2*(xp**4) + 6*focal*l2*(xp**2)*(yp**2) + focal*l2*(yp**4)
+    # J = np.zeros((2, 2))
+    # J[0, 0] = focal + 3*focal*l1*(xp**2) + focal*l1*(yp**2) + 5*focal*l2*(xp**4) + 6*focal*l2*(xp**2)*(yp**2) + focal*l2*(yp**4)
+    # J[0, 1] = 2*focal*l1*(xp)*(yp) + 4*focal*l2*(xp**3)*(yp) + 4*focal*l2*(xp)*(yp**3)
+    # J[1, 0] = 2*focal*(yp)*l1*(xp) + 4*focal*(yp)*l2*(xp**3) + 4*focal*l2*(xp)*(yp**3)
+    # J[1, 1] = focal + 3*focal*l1*(xp**2) + focal*l1*(yp**2) + 5*focal*l2*(xp**4) + 6*focal*l2*(xp**2)*(yp**2) + focal*l2*(yp**4)
+
+    J = np.zeros((2, 10))
+    J[0, 0] = (xp) + l1*(xp**3) + l1*(xp)*(yp**2) + l2*(xp**5) + 2*l2*(xp**3)*(yp**2) + l2*(xp)*(yp**4)
+    J[0, 1] = focal + 3*focal*l1*(xp**2) + focal*l1*(yp**2) + 5*focal*l2*(xp**4) + 6*focal*l2*(xp**2)*(yp**2) + focal*l2*(yp**4)
+    J[0, 2] = focal*(xp**3) + focal*(xp)*(yp**2)
+    J[0, 3] = 2*focal*l1*(xp)*(yp) + 4*focal*l2*(xp**3)*(yp) + 4*focal*l2*(xp)*(yp**3)
+    J[0, 4] = focal*(xp**5) + 2*focal*(xp**3)*(yp**2) + focal*(xp)*(yp**4)
+    J[1, 0] = (yp) + (yp)*l1*(xp**2) + l1*(yp**3) + (yp)*l2*(xp**4) + 2*l2*(xp**2)*(yp**3) + l2*(yp**5)
+    J[1, 1] = focal + focal*l1*(xp**2) + 3*focal*l1*(yp**2) + focal*l2*(xp**4) + 6*focal*l2*(xp**2)*(yp**2) + 5*focal*l2*(yp**4)
+    J[1, 2] = focal*(yp)*(xp**2) + focal*(yp**3)
+    J[1, 3] = 2*focal*(yp)*l1*(xp) + 4*focal*(yp)*l2*(xp**3) + 4*focal*l2*(xp)*(yp**3)
+    J[1, 4] = focal*(yp)*(xp**4) + 2*focal*(xp**2)*(yp**3) + focal*(yp**5)
 
     return J
 
