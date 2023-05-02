@@ -215,9 +215,5 @@ def J(x):
 x0 = np.array([0.97, 0.22])
 x = (np.array([-39608.39506173,11111.11111111,0.]), np.array([99825.529,-115.,45000.]), np.array([[1.5e+03,0.0e+00,5.0e+02],[0.0e+00,1.5e+03,5.0e+02],[0.0e+00,0.0e+00,1.0e+00]]), np.array([4600.32,5900.24]))
 # rvec, tvec, intrinsic, xy_observed
-print(x[3])
-# import ultralytics as u
-# import yolov5 as y
-# print(dir(u.YOLO))
-# print(dir(y.YOLOv5))
+
 x, Information = levenberg_marquardt(r_old, J_old, x0, Scaling=True)
