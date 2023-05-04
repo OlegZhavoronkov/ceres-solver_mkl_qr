@@ -209,18 +209,18 @@ def J(x):
     # dp2 pred_y
     J[1, 3] = focal*p1*(p2**(-2)) + 3*l1*focal*(p0**2)*p1*(p2**(-4)) + 3*l1*focal*(p1**3)*(p2**(-4)) + 5*l2*focal*(p0**4)*p1*(p2**(-6)) + 10*l2*focal*(p0**2)*(p1**3)*(p2**(-6)) + 5*l2*focal*(p1**5)*(p2**(-6))
     
+    return J
+
+    # Расчеты матрицы Якоби выполнялись вследствие следующих упрощений
     # distortion = 1.0 + l1*(xp**2 + yp**2) + l2*(xp**2 + yp**2)**2
     # predicted_x = focal*xp + focal*xp*l1*(xp**2 + yp**2) + focal*xp*l2*(xp**2 + yp**2)**2
     # predicted_y = focal*yp + focal*yp*l1*(xp**2 + yp**2) + focal*yp*l2*(xp**2 + yp**2)**2
     # predicted_x = focal*(xp) + focal*l1*(xp**3) + focal*l1*(xp)*(yp**2) + focal*l2*(xp**5) + 2*focal*l2*(xp**3)*(yp**2) + focal*l2*(xp)*(yp**4)
     # predicted_y = focal*(yp) + focal*(yp)*l1*(xp**2) + focal*l1*(yp**3) + focal*(yp)*l2*(xp**4) + 2*focal*l2*(xp**2)*(yp**3) + focal*l2*(yp**5)
-    # predicted_x = -(focal*p0)/p2 + focal*l1*((-p0/p2)**3) + focal*l1*(-p0/p2)*((-p1/p2)**2) + focal*l2*((-p0/p2)**5) + 2*focal*l2*((-p0/p2)**3)*((-p1/p2)**2) + focal*l2*(-p0/p2)*((-p1/p2)**4)
     # predicted_x = -focal*p0*p2**(-1) - focal*l1*p0**3*p2**(-3) - focal*l1*p0*p2**(-1)*p1**2*p2**(-2) - focal*l2*p0**5*p2**(-5) - 2*focal*l2*p0**3*p2**(-3)*p1**2*p2**(-2) - focal*l2*p0*p2**(-1)*p1**4*p2**(-4)
     # predicted_y = -focal*p1*p2**(-1) - focal*p1*p2**(-1)*l1*p0**2*p2**(-2) - focal*l1*p1**3*p2**(-3) - focal*p1*p2(-1)*l2*p0**4*p2**(-4) - 2*focal*l2*p0**2*p2**(-2)*p1**3*p2**(-3) - focal*l2*p1**5*p2**(-5)
     # predicted_x = -focal*p0*(p2**(-1)) - l1*focal*(p0**3)*(p2**(-3)) - l1*focal*p0*(p1**2)*(p2**(-3)) - l2*focal*(p0**5)*(p2**(-5)) - 2*l2*focal*(p0**3)*(p1**2)*(p2**(-5)) - l2*focal*p0*(p1**4)*(p2**(-5))
     # predicted_y = -focal*p1*(p2**(-1)) - l1*focal*(p0**2)*p1*(p2**(-3)) - l1*focal*(p1**3)*(p2**(-3)) - l2*focal*(p0**4)*p1*(p2**(-5)) - 2*l2*focal*(p0**2)*(p1**3)*(p2**(-5)) - l2*focal*(p1**5)*(p2**(-5))
-
-    return J
 
 x0 = np.array([0.97, 0.22])
 x = (np.array([-39608.39506173,11111.11111111,0.]), np.array([99825.529,-115.,45000.]), np.array([[1.5e+03,0.0e+00,5.0e+02],[0.0e+00,1.5e+03,5.0e+02],[0.0e+00,0.0e+00,1.0e+00]]), np.array([4600.32,5900.24]))
