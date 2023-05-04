@@ -161,9 +161,12 @@ def J_old(x):
 
 def r(x):
     r = np.zeros((2,))
-    _, tvec, camera, xy_obs = x
-    xp = -tvec[0]/tvec[2]
-    yp = -tvec[1]/tvec[2]
+    rvec, tvec, camera, xy_obs = x
+    p0 = rvec[0] + tvec[0]
+    p1 = rvec[1] + tvec[1]
+    p2 = rvec[2] + tvec[2]
+    xp = -p0/p2
+    yp = -p1/p2
     r2 = xp**2 + yp**2
     l1 = 1
     l2 = 1
@@ -176,55 +179,51 @@ def r(x):
     r[1] = predicted_y - xy_obs[1]
     
     return r
-# def r(x):
-#     r = np.zeros((2,))
-#     r[0] = x[0]**2 + x[1]**2 - 1
-#     r[1] = x[0] - x[1]**2
-#     return r
 
-# def J(x):
-#     J = np.zeros((2, 2))
-#     J[0, 0] = 2*x[0]
-#     J[0, 1] = 2*x[1]
-#     J[1, 0] = 1
-#     J[1, 1] = -2*x[1]
-#     return J
 def J(x):
     
-    _, tvec, camera, xy_obs = x
-    xp = -tvec[0]/tvec[2]
-    yp = -tvec[1]/tvec[2]
+    rvec, tvec, camera, _ = x
+    p0 = rvec[0] + tvec[0]
+    p1 = rvec[1] + tvec[1]
+    p2 = rvec[2] + tvec[2]
     l1 = 1
     l2 = 1
+    #l1,l2 берем константой
     focal = camera[0][0]
+    J = np.zeros((2, 4))
+    # dfocal pred_x
+    J[0, 0] = -p0*(p2**(-1)) - l1*(p0**3)*(p2**(-3)) - l1*p0*(p1**2)*(p2**(-3)) - l2*(p0**5)*(p2**(-5)) - 2*l2*(p0**3)*(p1**2)*(p2**(-5)) - l2*p0*(p1**4)*(p2**(-5))
+    # dp0 pred_x
+    J[0, 1] = -focal*(p2**(-1)) - 3*l1*focal*(p0**2)*(p2**(-3)) - l1*focal*(p1**2)*(p2**(-3)) - 5*l2*focal*(p0**4)*(p2**(-5)) - 6*l2*focal*(p0**2)*(p1**2)*(p2**(-5)) - l2*focal*(p1**4)*(p2**(-5))
+    # dp1 pred_x
+    J[0, 2] = -2*l1*focal*p0*p1*(p2**(-3)) - 4*l2*focal*(p0**3)*p1*(p2**(-5)) - 4*l2*focal*p0*(p1**3)*(p2**(-5))
+    # dp2 pred_x
+    J[0, 3] = focal*p0*(p2**(-2)) + 3*l1*focal*(p0**3)*(p2**(-4)) + 3*l1*focal*p0*(p1**2)*(p2**(-4)) + 5*l2*focal*(p0**5)*(p2**(-6)) + 10*l2*focal*(p0**3)*(p1**2)*(p2**(-6)) + 5*l2*focal*p0*(p1**4)*(p2**(-6))
+    
+    # dfocal pred_y
+    J[1, 0] = -p1*(p2**(-1)) - l1*(p0**2)*p1*(p2**(-3)) - l1*(p1**3)*(p2**(-3)) - l2*(p0**4)*p1*(p2**(-5)) - 2*l2*(p0**2)*(p1**3)*(p2**(-5)) - l2*(p1**5)*(p2**(-5))
+    # dp0 pred_y
+    J[1, 1] = -2*l1*focal*p0*p1*(p2**(-3)) - 4*l2*focal*(p0**3)*p1*(p2**(-5)) - 4*l2*focal*p0*(p1**3)*(p2**(-5))
+    # dp1 pred_y
+    J[1, 2] = -focal*(p2**(-1)) - l1*focal*(p0**2)*(p2**(-3)) - 3*l1*focal*(p1**2)*(p2**(-3)) - l2*focal*(p0**4)*(p2**(-5)) - 6*l2*focal*(p0**2)*(p1**2)*(p2**(-5)) - 5*l2*focal*(p1**4)*(p2**(-5))
+    # dp2 pred_y
+    J[1, 3] = focal*p1*(p2**(-2)) + 3*l1*focal*(p0**2)*p1*(p2**(-4)) + 3*l1*focal*(p1**3)*(p2**(-4)) + 5*l2*focal*(p0**4)*p1*(p2**(-6)) + 10*l2*focal*(p0**2)*(p1**3)*(p2**(-6)) + 5*l2*focal*(p1**5)*(p2**(-6))
     
     # distortion = 1.0 + l1*(xp**2 + yp**2) + l2*(xp**2 + yp**2)**2
     # predicted_x = focal*xp + focal*xp*l1*(xp**2 + yp**2) + focal*xp*l2*(xp**2 + yp**2)**2
     # predicted_y = focal*yp + focal*yp*l1*(xp**2 + yp**2) + focal*yp*l2*(xp**2 + yp**2)**2
     # predicted_x = focal*(xp) + focal*l1*(xp**3) + focal*l1*(xp)*(yp**2) + focal*l2*(xp**5) + 2*focal*l2*(xp**3)*(yp**2) + focal*l2*(xp)*(yp**4)
     # predicted_y = focal*(yp) + focal*(yp)*l1*(xp**2) + focal*l1*(yp**3) + focal*(yp)*l2*(xp**4) + 2*focal*l2*(xp**2)*(yp**3) + focal*l2*(yp**5)
-    # J = np.zeros((2, 2))
-    # J[0, 0] = focal + 3*focal*l1*(xp**2) + focal*l1*(yp**2) + 5*focal*l2*(xp**4) + 6*focal*l2*(xp**2)*(yp**2) + focal*l2*(yp**4)
-    # J[0, 1] = 2*focal*l1*(xp)*(yp) + 4*focal*l2*(xp**3)*(yp) + 4*focal*l2*(xp)*(yp**3)
-    # J[1, 0] = 2*focal*(yp)*l1*(xp) + 4*focal*(yp)*l2*(xp**3) + 4*focal*l2*(xp)*(yp**3)
-    # J[1, 1] = focal + 3*focal*l1*(xp**2) + focal*l1*(yp**2) + 5*focal*l2*(xp**4) + 6*focal*l2*(xp**2)*(yp**2) + focal*l2*(yp**4)
-
-    J = np.zeros((2, 10))
-    J[0, 0] = (xp) + l1*(xp**3) + l1*(xp)*(yp**2) + l2*(xp**5) + 2*l2*(xp**3)*(yp**2) + l2*(xp)*(yp**4)
-    J[0, 1] = focal + 3*focal*l1*(xp**2) + focal*l1*(yp**2) + 5*focal*l2*(xp**4) + 6*focal*l2*(xp**2)*(yp**2) + focal*l2*(yp**4)
-    J[0, 2] = focal*(xp**3) + focal*(xp)*(yp**2)
-    J[0, 3] = 2*focal*l1*(xp)*(yp) + 4*focal*l2*(xp**3)*(yp) + 4*focal*l2*(xp)*(yp**3)
-    J[0, 4] = focal*(xp**5) + 2*focal*(xp**3)*(yp**2) + focal*(xp)*(yp**4)
-    J[1, 0] = (yp) + (yp)*l1*(xp**2) + l1*(yp**3) + (yp)*l2*(xp**4) + 2*l2*(xp**2)*(yp**3) + l2*(yp**5)
-    J[1, 1] = focal + focal*l1*(xp**2) + 3*focal*l1*(yp**2) + focal*l2*(xp**4) + 6*focal*l2*(xp**2)*(yp**2) + 5*focal*l2*(yp**4)
-    J[1, 2] = focal*(yp)*(xp**2) + focal*(yp**3)
-    J[1, 3] = 2*focal*(yp)*l1*(xp) + 4*focal*(yp)*l2*(xp**3) + 4*focal*l2*(xp)*(yp**3)
-    J[1, 4] = focal*(yp)*(xp**4) + 2*focal*(xp**2)*(yp**3) + focal*(yp**5)
+    # predicted_x = -(focal*p0)/p2 + focal*l1*((-p0/p2)**3) + focal*l1*(-p0/p2)*((-p1/p2)**2) + focal*l2*((-p0/p2)**5) + 2*focal*l2*((-p0/p2)**3)*((-p1/p2)**2) + focal*l2*(-p0/p2)*((-p1/p2)**4)
+    # predicted_x = -focal*p0*p2**(-1) - focal*l1*p0**3*p2**(-3) - focal*l1*p0*p2**(-1)*p1**2*p2**(-2) - focal*l2*p0**5*p2**(-5) - 2*focal*l2*p0**3*p2**(-3)*p1**2*p2**(-2) - focal*l2*p0*p2**(-1)*p1**4*p2**(-4)
+    # predicted_y = -focal*p1*p2**(-1) - focal*p1*p2**(-1)*l1*p0**2*p2**(-2) - focal*l1*p1**3*p2**(-3) - focal*p1*p2(-1)*l2*p0**4*p2**(-4) - 2*focal*l2*p0**2*p2**(-2)*p1**3*p2**(-3) - focal*l2*p1**5*p2**(-5)
+    # predicted_x = -focal*p0*(p2**(-1)) - l1*focal*(p0**3)*(p2**(-3)) - l1*focal*p0*(p1**2)*(p2**(-3)) - l2*focal*(p0**5)*(p2**(-5)) - 2*l2*focal*(p0**3)*(p1**2)*(p2**(-5)) - l2*focal*p0*(p1**4)*(p2**(-5))
+    # predicted_y = -focal*p1*(p2**(-1)) - l1*focal*(p0**2)*p1*(p2**(-3)) - l1*focal*(p1**3)*(p2**(-3)) - l2*focal*(p0**4)*p1*(p2**(-5)) - 2*l2*focal*(p0**2)*(p1**3)*(p2**(-5)) - l2*focal*(p1**5)*(p2**(-5))
 
     return J
 
 x0 = np.array([0.97, 0.22])
 x = (np.array([-39608.39506173,11111.11111111,0.]), np.array([99825.529,-115.,45000.]), np.array([[1.5e+03,0.0e+00,5.0e+02],[0.0e+00,1.5e+03,5.0e+02],[0.0e+00,0.0e+00,1.0e+00]]), np.array([4600.32,5900.24]))
 # rvec, tvec, intrinsic, xy_observed
-
-x, Information = levenberg_marquardt(r_old, J_old, x0, Scaling=True)
+print(J(x))
+#x, Information = levenberg_marquardt(r_old, J_old, x0, Scaling=True)
