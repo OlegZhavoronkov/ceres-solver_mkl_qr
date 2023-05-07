@@ -22,6 +22,7 @@ def create_cameras(K):
     for i in range(K): 
         #rvec = np.random.rand(3)
         #tvec = np.random.rand(3)
+        
         if i == 0:
             tangent_vector = trajectory[i+1] - trajectory[i]
         elif i == K-1:
@@ -29,11 +30,13 @@ def create_cameras(K):
         else:
             tangent_vector = trajectory[i+1] - trajectory[i-1]
             
+        tangent_vector /= np.linalg.norm(tangent_vector)    
+
         tvec = trajectory[i]
         camera_matrix = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
         #cameras.append((rvec, tvec, camera_matrix))
         cameras.append((tangent_vector, tvec, camera_matrix))
-        #print('tvec:',tvec,'tang:',tangent_vector)
+
     return cameras
 
 def write_points_and_cameras(points_file, cameras_file, points, cameras):
@@ -48,7 +51,6 @@ def transform_points_to_camera(points, camera):
     T = np.array(tvec).reshape(3, 1)
     points_camera = np.dot(np.linalg.inv(R), (points - T.T).T).T
     return points_camera
-# поменять create_cameras rvec, tvec: локализовать фичи с нескольких камер, чтобы фича была видна на n-1 камер, точки около диагонали
 
 
 
