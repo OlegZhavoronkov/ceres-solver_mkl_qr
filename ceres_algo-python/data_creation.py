@@ -90,7 +90,10 @@ def project_points(points, cameras):
         for j in range(i+1,len(cameras)): 
             if j>i:
                 for k in range(0,len(points)):
-                    if visible[j][k] == visible[i][k]:
+                    # if visible[j][k] == visible[i][k]:
+                    #     result = (i, projections[i][k][0], projections[i][k][1], j, projections[j][k][0], projections[j][k][1])
+                    #     visible_on_2_projections.append(result)
+                    if (visible[j][k]==True) and (visible[i][k]==True):
                         result = (i, projections[i][k][0], projections[i][k][1], j, projections[j][k][0], projections[j][k][1])
                         visible_on_2_projections.append(result)
                     
@@ -110,8 +113,8 @@ write_points_and_cameras('points.pkl', 'cameras.pkl', points, cameras)
 projections = project_points(points, cameras)
 write_projections('projections.pkl', projections)
 print(len(projections))
-print(projections[0])
-print(cameras[0])
+print(projections[155])
+#print(cameras[0])
 
 
 
