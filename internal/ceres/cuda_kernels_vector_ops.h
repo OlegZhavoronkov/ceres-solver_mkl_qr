@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2022 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -28,8 +28,8 @@
 //
 // Author: joydeepb@cs.utexas.edu (Joydeep Biswas)
 
-#ifndef CERES_INTERNAL_CUDA_KERNELS_H_
-#define CERES_INTERNAL_CUDA_KERNELS_H_
+#ifndef CERES_INTERNAL_CUDA_KERNELS_VECTOR_OPS_H_
+#define CERES_INTERNAL_CUDA_KERNELS_VECTOR_OPS_H_
 
 #include "ceres/internal/config.h"
 
@@ -37,7 +37,10 @@
 
 #include "cuda_runtime.h"
 
-namespace ceres::internal {
+namespace ceres {
+namespace internal {
+class Block;
+class Cell;
 
 // Convert an array of double (FP64) values to float (FP32). Both arrays must
 // already be on GPU memory.
@@ -72,8 +75,9 @@ void CudaDtDxpy(double* y,
                 const int size,
                 cudaStream_t stream);
 
-}  // namespace ceres::internal
+}  // namespace internal
+}  // namespace ceres
 
 #endif  // CERES_NO_CUDA
 
-#endif  // CERES_INTERNAL_CUDA_KERNELS_H_
+#endif  // CERES_INTERNAL_CUDA_KERNELS_VECTOR_OPS_H_

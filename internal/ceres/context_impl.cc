@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2018 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -60,9 +60,11 @@ void ContextImpl::TearDown() {
     cusparseDestroy(cusparse_handle_);
     cusparse_handle_ = nullptr;
   }
-  if (stream_ != nullptr) {
-    cudaStreamDestroy(stream_);
-    stream_ = nullptr;
+  for (auto& s : streams_) {
+    if (s != nullptr) {
+      cudaStreamDestroy(s);
+      s = nullptr;
+    }
   }
   is_cuda_initialized_ = false;
 }
@@ -70,17 +72,18 @@ void ContextImpl::TearDown() {
 std::string ContextImpl::CudaConfigAsString() const {
   return ceres::internal::StringPrintf(
       "======================= CUDA Device Properties ======================\n"
-      "Cuda version         : %d.%d\n"
-      "Device ID            : %d\n"
-      "Device name          : %s\n"
-      "Total GPU memory     : %6.f MiB\n"
-      "GPU memory available : %6.f MiB\n"
-      "Compute capability   : %d.%d\n"
-      "Warp size            : %d\n"
-      "Max threads per block: %d\n"
-      "Max threads per dim  : %d %d %d\n"
-      "Max grid size        : %d %d %d\n"
-      "Multiprocessor count : %d\n"
+      "Cuda version              : %d.%d\n"
+      "Device ID                 : %d\n"
+      "Device name               : %s\n"
+      "Total GPU memory          : %6.f MiB\n"
+      "GPU memory available      : %6.f MiB\n"
+      "Compute capability        : %d.%d\n"
+      "Warp size                 : %d\n"
+      "Max threads per block     : %d\n"
+      "Max threads per dim       : %d %d %d\n"
+      "Max grid size             : %d %d %d\n"
+      "Multiprocessor count      : %d\n"
+      "cudaMallocAsync supported : %s\n"
       "====================================================================",
       cuda_version_major_,
       cuda_version_minor_,
@@ -98,7 +101,8 @@ std::string ContextImpl::CudaConfigAsString() const {
       gpu_device_properties_.maxGridSize[0],
       gpu_device_properties_.maxGridSize[1],
       gpu_device_properties_.maxGridSize[2],
-      gpu_device_properties_.multiProcessorCount);
+      gpu_device_properties_.multiProcessorCount,
+      gpu_device_properties_.memoryPoolsSupported ? "Yes" : "No");
 }
 
 size_t ContextImpl::GpuMemoryAvailable() const {
@@ -143,19 +147,22 @@ bool ContextImpl::InitCuda(std::string* message) {
     return false;
   }
   event_logger.AddEvent("cusparseCreate");
-  if (cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking) !=
-      cudaSuccess) {
-    *message =
-        "CUDA initialization failed because CUDA::cudaStreamCreateWithFlags "
-        "failed.";
-    TearDown();
-    return false;
+  for (auto& s : streams_) {
+    if (cudaStreamCreateWithFlags(&s, cudaStreamNonBlocking) != cudaSuccess) {
+      *message =
+          "CUDA initialization failed because CUDA::cudaStreamCreateWithFlags "
+          "failed.";
+      TearDown();
+      return false;
+    }
   }
   event_logger.AddEvent("cudaStreamCreateWithFlags");
-  if (cusolverDnSetStream(cusolver_handle_, stream_) !=
+  if (cusolverDnSetStream(cusolver_handle_, DefaultStream()) !=
           CUSOLVER_STATUS_SUCCESS ||
-      cublasSetStream(cublas_handle_, stream_) != CUBLAS_STATUS_SUCCESS ||
-      cusparseSetStream(cusparse_handle_, stream_) != CUSPARSE_STATUS_SUCCESS) {
+      cublasSetStream(cublas_handle_, DefaultStream()) !=
+          CUBLAS_STATUS_SUCCESS ||
+      cusparseSetStream(cusparse_handle_, DefaultStream()) !=
+          CUSPARSE_STATUS_SUCCESS) {
     *message = "CUDA initialization failed because SetStream failed.";
     TearDown();
     return false;
@@ -163,6 +170,40 @@ bool ContextImpl::InitCuda(std::string* message) {
   event_logger.AddEvent("SetStream");
   is_cuda_initialized_ = true;
   return true;
+}
+
+void* ContextImpl::CudaMalloc(size_t size, cudaStream_t stream) const {
+  void* data = nullptr;
+  // Stream-ordered alloaction API is available since CUDA 11.4, but might be
+  // not implemented by particular device
+#if CUDART_VERSION < 11040
+#warning \
+    "Stream-ordered allocations are unavailable, consider updating CUDA toolkit to version 11.4+"
+  CHECK_EQ(cudaSuccess, cudaMalloc(&data, size));
+#else
+  if (gpu_device_properties_.memoryPoolsSupported) {
+    CHECK_EQ(cudaSuccess, cudaMallocAsync(&data, size, stream));
+  } else {
+    CHECK_EQ(cudaSuccess, cudaMalloc(&data, size));
+  }
+#endif
+  return data;
+}
+
+void ContextImpl::CudaFree(void* data, cudaStream_t stream) const {
+  // Stream-ordered alloaction API is available since CUDA 11.4, but might be
+  // not implemented by particular device
+#if CUDART_VERSION < 11040
+#warning \
+    "Stream-ordered allocations are unavailable, consider updating CUDA toolkit to version 11.4+"
+  CHECK_EQ(cudaSuccess, cudaFree(data));
+#else
+  if (gpu_device_properties_.memoryPoolsSupported) {
+    CHECK_EQ(cudaSuccess, cudaFreeAsync(data, stream));
+  } else {
+    CHECK_EQ(cudaSuccess, cudaFree(data));
+  }
+#endif
 }
 #endif  // CERES_NO_CUDA
 

@@ -81,15 +81,9 @@ endif (SCHUR_SPECIALIZATIONS)
 # to a different value than Eigen's default.  Depending on the order of files
 # in the unity build this can lead to clashes.  Additionally, these files are
 # already generated in a way which leads to fairly large compilation units,
-# so the gains from a unity build would be marginal.  Since this property is
-# not available before cmake 3.16, unity build is only available from this
-# version on.
-if (NOT CMAKE_VERSION VERSION_LESS 3.16)
-  set_source_files_properties(${CERES_INTERNAL_SCHUR_FILES} PROPERTIES
-    SKIP_UNITY_BUILD_INCLUSION ON)
-elseif(CMAKE_UNITY_BUILD)
-  message(FATAL_ERROR "Unity build requires cmake 3.16 or newer.  Please unset CMAKE_UNITY_BUILD.")
-endif()
+# so the gains from a unity build would be marginal.
+set_source_files_properties(${CERES_INTERNAL_SCHUR_FILES} PROPERTIES
+  SKIP_UNITY_BUILD_INCLUSION ON)
 
 if (NOT MINIGLOG AND GLOG_FOUND)
   list(APPEND CERES_LIBRARY_PUBLIC_DEPENDENCIES ${GLOG_LIBRARIES})
@@ -130,19 +124,14 @@ if (USE_CUDA)
     CUDA::cudart
     CUDA::cusolver
     CUDA::cusparse)
-  if (BUILD_TESTING AND GFLAGS)
-    add_test(
-        NAME cuda_memcheck_dense_qr_test
-        COMMAND ${CUDAToolkit_BIN_DIR}/cuda-memcheck --leak-check full
-            $<TARGET_FILE:cuda_dense_qr_test>)
-    add_test(
-        NAME cuda_memcheck_dense_cholesky_test
-        COMMAND ${CUDAToolkit_BIN_DIR}/cuda-memcheck --leak-check full
-            $<TARGET_FILE:cuda_dense_cholesky_test>)
-  endif (BUILD_TESTING AND GFLAGS)
-  set_source_files_properties(cuda_kernels.cu.cc PROPERTIES LANGUAGE CUDA)
-  add_library(ceres_cuda_kernels cuda_kernels.cu.cc)
+  set_source_files_properties(cuda_kernels_vector_ops.cu.cc PROPERTIES LANGUAGE CUDA)
+  set_source_files_properties(cuda_kernels_bsm_to_crs.cu.cc PROPERTIES LANGUAGE CUDA)
+  add_library(ceres_cuda_kernels STATIC cuda_kernels_vector_ops.cu.cc cuda_kernels_bsm_to_crs.cu.cc)
   target_compile_features(ceres_cuda_kernels PRIVATE cxx_std_14)
+  target_compile_definitions(ceres_cuda_kernels PRIVATE CERES_STATIC_DEFINE)
+  # Enable __host__ / __device__ annotations in lambda declarations
+  target_compile_options(ceres_cuda_kernels PRIVATE --extended-lambda)
+  target_include_directories(ceres_cuda_kernels PRIVATE  ${Ceres_SOURCE_DIR}/include  ${Ceres_SOURCE_DIR}/internal ${Ceres_BINARY_DIR}/${CMAKE_INSTALL_INCLUDEDIR})
   list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES ceres_cuda_kernels)
 endif (USE_CUDA)
 
@@ -181,6 +170,9 @@ add_library(ceres_internal OBJECT
     cost_function.cc
     covariance.cc
     covariance_impl.cc
+    cuda_block_sparse_crs_view.cc
+    cuda_partitioned_block_sparse_crs_view.cc
+    cuda_block_structure.cc
     cuda_sparse_matrix.cc
     cuda_vector.cc
     dense_cholesky.cc
@@ -472,10 +464,14 @@ if (BUILD_TESTING AND GFLAGS)
   ceres_test(cost_function_to_functor)
   ceres_test(covariance)
   ceres_test(cubic_interpolation)
+  ceres_test(cuda_partitioned_block_sparse_crs_view)
+  ceres_test(cuda_block_sparse_crs_view)
+  ceres_test(cuda_block_structure)
   ceres_test(cuda_dense_cholesky)
   ceres_test(cuda_dense_qr)
-  ceres_test(cuda_kernels)
+  ceres_test(cuda_kernels_vector_ops)
   ceres_test(cuda_sparse_matrix)
+  ceres_test(cuda_streamed_buffer)
   ceres_test(cuda_vector)
   ceres_test(dense_linear_solver)
   ceres_test(dense_cholesky)

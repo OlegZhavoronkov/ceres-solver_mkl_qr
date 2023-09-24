@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2022 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -1381,6 +1381,7 @@ struct NumTraits<ceres::Jet<T, N>> {
   }
 
   static inline int digits10() { return NumTraits<T>::digits10(); }
+  static inline int max_digits10() { return NumTraits<T>::max_digits10(); }
 
   enum {
     IsComplex = 0,

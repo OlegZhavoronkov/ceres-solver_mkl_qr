@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2022 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -46,6 +46,10 @@
 #include "ceres/triplet_sparse_matrix.h"
 #include "glog/logging.h"
 
+#ifndef CERES_NO_CUDA
+#include "cuda_runtime.h"
+#endif
+
 namespace ceres::internal {
 
 namespace {
@@ -85,23 +89,18 @@ CreateStructureOfCompressedRowSparseMatrix(
       continue;
     }
 
-    // Compute number of non-zeros per row from number of non-zeros in row-block
-    int row_block_nnz;
+    int row_nnz = 0;
     if constexpr (transpose) {
-      // Transposed block structure comes with nnz filled-in
-      row_block_nnz = row_block.nnz;
+      // Transposed block structure comes with nnz in row-block filled-in
+      row_nnz = row_block.nnz / row_block.block.size;
     } else {
-      // Non-transposed block structure has sequential layout, but nnz field of
-      // block structure is not filled. Difference between values position of
-      // the first and the last cells in row-block gives number of non-zero
-      // elements in row-block excluding the last cell.
-      const auto& front = row_block.cells.front();
-      const auto& back = row_block.cells.back();
-      row_block_nnz =
-          (back.position - front.position) +
-          block_structure->cols[back.block_id].size * row_block.block.size;
+      // Nnz field of non-transposed block structure is not filled and it can
+      // have non-sequential structure (consider the case of jacobian for
+      // Schur-complement solver: E and F blocks are stored separately).
+      for (auto& c : row_block.cells) {
+        row_nnz += cols[c.block_id].size;
+      }
     }
-    const int row_nnz = row_block_nnz / row_block.block.size;
 
     // Row-wise setup of matrix structure
     for (int row = 0; row < row_block.block.size; ++row) {
@@ -176,8 +175,9 @@ void SetBlockStructureOfCompressedRowSparseMatrix(
 }  // namespace
 
 BlockSparseMatrix::BlockSparseMatrix(
-    CompressedRowBlockStructure* block_structure)
-    : num_rows_(0),
+    CompressedRowBlockStructure* block_structure, bool use_page_locked_memory)
+    : use_page_locked_memory_(use_page_locked_memory),
+      num_rows_(0),
       num_cols_(0),
       num_nonzeros_(0),
       block_structure_(block_structure) {
@@ -207,11 +207,14 @@ BlockSparseMatrix::BlockSparseMatrix(
   CHECK_GE(num_nonzeros_, 0);
   VLOG(2) << "Allocating values array with " << num_nonzeros_ * sizeof(double)
           << " bytes.";  // NOLINT
-  values_ = std::make_unique<double[]>(num_nonzeros_);
+
+  values_ = AllocateValues(num_nonzeros_);
   max_num_nonzeros_ = num_nonzeros_;
   CHECK(values_ != nullptr);
   AddTransposeBlockStructure();
 }
+
+BlockSparseMatrix::~BlockSparseMatrix() { FreeValues(values_); }
 
 void BlockSparseMatrix::AddTransposeBlockStructure() {
   if (transpose_block_structure_ == nullptr) {
@@ -220,11 +223,11 @@ void BlockSparseMatrix::AddTransposeBlockStructure() {
 }
 
 void BlockSparseMatrix::SetZero() {
-  std::fill(values_.get(), values_.get() + num_nonzeros_, 0.0);
+  std::fill(values_, values_ + num_nonzeros_, 0.0);
 }
 
 void BlockSparseMatrix::SetZero(ContextImpl* context, int num_threads) {
-  ParallelSetZero(context, num_threads, values_.get(), num_nonzeros_);
+  ParallelSetZero(context, num_threads, values_, num_nonzeros_);
 }
 
 void BlockSparseMatrix::RightMultiplyAndAccumulate(const double* x,
@@ -239,7 +242,7 @@ void BlockSparseMatrix::RightMultiplyAndAccumulate(const double* x,
   CHECK(x != nullptr);
   CHECK(y != nullptr);
 
-  const auto values = values_.get();
+  const auto values = values_;
   const auto block_structure = block_structure_.get();
   const auto num_row_blocks = block_structure->rows.size();
 
@@ -287,7 +290,7 @@ void BlockSparseMatrix::LeftMultiplyAndAccumulate(const double* x,
   }
 
   auto transpose_bs = transpose_block_structure_.get();
-  const auto values = values_.get();
+  const auto values = values_;
   const int num_col_blocks = transpose_bs->rows.size();
   if (!num_col_blocks) {
     return;
@@ -335,7 +338,7 @@ void BlockSparseMatrix::LeftMultiplyAndAccumulate(const double* x,
       int col_block_size = block_structure_->cols[col_block_id].size;
       int col_block_pos = block_structure_->cols[col_block_id].position;
       MatrixTransposeVectorMultiply<Eigen::Dynamic, Eigen::Dynamic, 1>(
-          values_.get() + cell.position,
+          values_ + cell.position,
           row_block_size,
           col_block_size,
           x + row_block_pos,
@@ -355,7 +358,7 @@ void BlockSparseMatrix::SquaredColumnNorm(double* x) const {
       int col_block_size = block_structure_->cols[col_block_id].size;
       int col_block_pos = block_structure_->cols[col_block_id].position;
       const MatrixRef m(
-          values_.get() + cell.position, row_block_size, col_block_size);
+          values_ + cell.position, row_block_size, col_block_size);
       VectorRef(x + col_block_pos, col_block_size) += m.colwise().squaredNorm();
     }
   }
@@ -375,7 +378,7 @@ void BlockSparseMatrix::SquaredColumnNorm(double* x,
   ParallelSetZero(context, num_threads, x, num_cols_);
 
   auto transpose_bs = transpose_block_structure_.get();
-  const auto values = values_.get();
+  const auto values = values_;
   const int num_col_blocks = transpose_bs->rows.size();
   ParallelFor(
       context,
@@ -406,8 +409,7 @@ void BlockSparseMatrix::ScaleColumns(const double* scale) {
       int col_block_id = cell.block_id;
       int col_block_size = block_structure_->cols[col_block_id].size;
       int col_block_pos = block_structure_->cols[col_block_id].position;
-      MatrixRef m(
-          values_.get() + cell.position, row_block_size, col_block_size);
+      MatrixRef m(values_ + cell.position, row_block_size, col_block_size);
       m *= ConstVectorRef(scale + col_block_pos, col_block_size).asDiagonal();
     }
   }
@@ -425,7 +427,7 @@ void BlockSparseMatrix::ScaleColumns(const double* scale,
 
   CHECK(scale != nullptr);
   auto transpose_bs = transpose_block_structure_.get();
-  auto values = values_.get();
+  auto values = values_;
   const int num_col_blocks = transpose_bs->rows.size();
   ParallelFor(
       context,
@@ -505,7 +507,7 @@ void BlockSparseMatrix::ToDenseMatrix(Matrix* dense_matrix) const {
       int col_block_pos = block_structure_->cols[col_block_id].position;
       int jac_pos = cell.position;
       m.block(row_block_pos, col_block_pos, row_block_size, col_block_size) +=
-          MatrixRef(values_.get() + jac_pos, row_block_size, col_block_size);
+          MatrixRef(values_ + jac_pos, row_block_size, col_block_size);
     }
   }
 }
@@ -648,15 +650,15 @@ void BlockSparseMatrix::AppendRows(const BlockSparseMatrix& m) {
   }
 
   if (num_nonzeros_ > max_num_nonzeros_) {
-    auto new_values = std::make_unique<double[]>(num_nonzeros_);
-    std::copy_n(values_.get(), old_num_nonzeros, new_values.get());
-    values_ = std::move(new_values);
+    double* old_values = values_;
+    values_ = AllocateValues(num_nonzeros_);
+    std::copy_n(old_values, old_num_nonzeros, values_);
     max_num_nonzeros_ = num_nonzeros_;
+    FreeValues(old_values);
   }
 
-  std::copy(m.values(),
-            m.values() + m.num_nonzeros(),
-            values_.get() + old_num_nonzeros);
+  std::copy(
+      m.values(), m.values() + m.num_nonzeros(), values_ + old_num_nonzeros);
 
   if (transpose_block_structure_ == nullptr) {
     return;
@@ -707,7 +709,9 @@ void BlockSparseMatrix::DeleteRowBlocks(const int delta_row_blocks) {
 }
 
 std::unique_ptr<BlockSparseMatrix> BlockSparseMatrix::CreateRandomMatrix(
-    const BlockSparseMatrix::RandomMatrixOptions& options, std::mt19937& prng) {
+    const BlockSparseMatrix::RandomMatrixOptions& options,
+    std::mt19937& prng,
+    bool use_page_locked_memory) {
   CHECK_GT(options.num_row_blocks, 0);
   CHECK_GT(options.min_row_block_size, 0);
   CHECK_GT(options.max_row_block_size, 0);
@@ -764,7 +768,8 @@ std::unique_ptr<BlockSparseMatrix> BlockSparseMatrix::CreateRandomMatrix(
     }
   }
 
-  auto matrix = std::make_unique<BlockSparseMatrix>(bs.release());
+  auto matrix =
+      std::make_unique<BlockSparseMatrix>(bs.release(), use_page_locked_memory);
   double* values = matrix->mutable_values();
   std::normal_distribution<double> standard_normal_distribution;
   std::generate_n(
@@ -800,5 +805,39 @@ std::unique_ptr<CompressedRowBlockStructure> CreateTranspose(
   ComputeCumulativeNumberOfNonZeros(transpose->rows);
   return transpose;
 }
+
+double* BlockSparseMatrix::AllocateValues(int size) {
+  if (!use_page_locked_memory_) {
+    return new double[size];
+  }
+
+#ifndef CERES_NO_CUDA
+
+  double* values = nullptr;
+  CHECK_EQ(cudaSuccess,
+           cudaHostAlloc(&values, sizeof(double) * size, cudaHostAllocDefault));
+  return values;
+#else
+  LOG(FATAL) << "Page locked memory requested when CUDA is not available. "
+             << "This is a Ceres bug; please contact the developers!";
+  return nullptr;
+#endif
+};
+
+void BlockSparseMatrix::FreeValues(double*& values) {
+  if (!use_page_locked_memory_) {
+    delete[] values;
+    values = nullptr;
+    return;
+  }
+
+#ifndef CERES_NO_CUDA
+  CHECK_EQ(cudaSuccess, cudaFreeHost(values));
+  values = nullptr;
+#else
+  LOG(FATAL) << "Page locked memory requested when CUDA is not available. "
+             << "This is a Ceres bug; please contact the developers!";
+#endif
+};
 
 }  // namespace ceres::internal
