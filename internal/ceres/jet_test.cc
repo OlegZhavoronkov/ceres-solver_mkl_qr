@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2022 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -46,15 +46,14 @@
 #ifdef _MSC_VER
 #pragma float_control(precise, on, push)
 #pragma fenv_access(on)
-#elif !(defined(__ARM_ARCH) && __ARM_ARCH >= 8)
-// NOTE: FENV_ACCESS cannot be set to ON when targeting arm(v8)
+#elif !(defined(__ARM_ARCH) && __ARM_ARCH >= 8) && !defined(__MINGW32__)
+// NOTE: FENV_ACCESS cannot be set to ON when targeting arm(v8) and MinGW
 #pragma STDC FENV_ACCESS ON
 #else
 #define CERES_NO_FENV_ACCESS
 #endif
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 namespace {
 
@@ -379,7 +378,7 @@ TEST(Jet, Log1p) {
     J x = MakeJet(1e-16, 1e-8, 1e-4);
     EXPECT_THAT(log1p(x),
                 IsAlmostEqualTo(MakeJet(9.9999999999999998e-17, 1e-8, 1e-4)));
-    // log(1 + x) collapes to 0
+    // log(1 + x) collapses to 0
     J v = log(J{1} + x);
     EXPECT_TRUE(v.a == 0);
   }
@@ -392,7 +391,7 @@ TEST(Jet, Expm1) {
   {  // expm1(x) does not loose precision for small x
     J x = MakeJet(9.9999999999999998e-17, 1e-8, 1e-4);
     EXPECT_THAT(expm1(x), IsAlmostEqualTo(MakeJet(1e-16, 1e-8, 1e-4)));
-    // exp(x) - 1 collapes to 0
+    // exp(x) - 1 collapses to 0
     J v = exp(x) - J{1};
     EXPECT_TRUE(v.a == 0);
   }
@@ -595,7 +594,6 @@ TEST(Jet, Hypot2) {
   EXPECT_THAT(hypot(huge, J{0}), IsAlmostEqualTo(huge));
 }
 
-#ifdef CERES_HAS_CPP17
 TEST(Jet, Hypot3) {
   J zero = MakeJet(0.0, 2.0, 3.14);
 
@@ -636,8 +634,6 @@ TEST(Jet, Hypot3) {
   EXPECT_THAT(hypot(huge, J{0}, J{0}), IsAlmostEqualTo(huge));
 #endif
 }
-
-#endif  // defined(CERES_HAS_CPP17)
 
 #ifdef CERES_HAS_CPP20
 
@@ -686,7 +682,7 @@ TEST(Jet, Fma) {
   EXPECT_THAT(v, IsAlmostEqualTo(w));
 }
 
-TEST(Jet, Fmax) {
+TEST(Jet, FmaxJetWithJet) {
   Fenv env;
   // Clear all exceptions to ensure none are set by the following function
   // calls.
@@ -694,21 +690,54 @@ TEST(Jet, Fmax) {
 
   EXPECT_THAT(fmax(x, y), IsAlmostEqualTo(x));
   EXPECT_THAT(fmax(y, x), IsAlmostEqualTo(x));
-  EXPECT_THAT(fmax(x, y.a), IsAlmostEqualTo(x));
-  EXPECT_THAT(fmax(y.a, x), IsAlmostEqualTo(x));
-  EXPECT_THAT(fmax(y, x.a), IsAlmostEqualTo(J{x.a}));
-  EXPECT_THAT(fmax(x.a, y), IsAlmostEqualTo(J{x.a}));
-  EXPECT_THAT(fmax(x, std::numeric_limits<double>::quiet_NaN()),
-              IsAlmostEqualTo(x));
-  EXPECT_THAT(fmax(std::numeric_limits<double>::quiet_NaN(), x),
-              IsAlmostEqualTo(x));
+
+  // Average the Jets on equality (of scalar parts).
+  const J scalar_part_only_equal_to_x = J(x.a, 2 * x.v);
+  const J average = (x + scalar_part_only_equal_to_x) * 0.5;
+  EXPECT_THAT(fmax(x, scalar_part_only_equal_to_x), IsAlmostEqualTo(average));
+  EXPECT_THAT(fmax(scalar_part_only_equal_to_x, x), IsAlmostEqualTo(average));
+
+  // Follow convention of fmax(): treat NANs as missing values.
+  const J nan_scalar_part(std::numeric_limits<double>::quiet_NaN(), 2 * x.v);
+  EXPECT_THAT(fmax(x, nan_scalar_part), IsAlmostEqualTo(x));
+  EXPECT_THAT(fmax(nan_scalar_part, x), IsAlmostEqualTo(x));
 
 #ifndef CERES_NO_FENV_ACCESS
   EXPECT_EQ(std::fetestexcept(FE_ALL_EXCEPT & ~FE_INEXACT), 0);
 #endif
 }
 
-TEST(Jet, Fmin) {
+TEST(Jet, FmaxJetWithScalar) {
+  Fenv env;
+  // Clear all exceptions to ensure none are set by the following function
+  // calls.
+  std::feclearexcept(FE_ALL_EXCEPT);
+
+  EXPECT_THAT(fmax(x, y.a), IsAlmostEqualTo(x));
+  EXPECT_THAT(fmax(y.a, x), IsAlmostEqualTo(x));
+  EXPECT_THAT(fmax(y, x.a), IsAlmostEqualTo(J{x.a}));
+  EXPECT_THAT(fmax(x.a, y), IsAlmostEqualTo(J{x.a}));
+
+  // Average the Jet and scalar cast to a Jet on equality (of scalar parts).
+  const J average = (x + J{x.a}) * 0.5;
+  EXPECT_THAT(fmax(x, x.a), IsAlmostEqualTo(average));
+  EXPECT_THAT(fmax(x.a, x), IsAlmostEqualTo(average));
+
+  // Follow convention of fmax(): treat NANs as missing values.
+  EXPECT_THAT(fmax(x, std::numeric_limits<double>::quiet_NaN()),
+              IsAlmostEqualTo(x));
+  EXPECT_THAT(fmax(std::numeric_limits<double>::quiet_NaN(), x),
+              IsAlmostEqualTo(x));
+  const J nan_scalar_part(std::numeric_limits<double>::quiet_NaN(), 2 * x.v);
+  EXPECT_THAT(fmax(nan_scalar_part, x.a), IsAlmostEqualTo(J{x.a}));
+  EXPECT_THAT(fmax(x.a, nan_scalar_part), IsAlmostEqualTo(J{x.a}));
+
+#ifndef CERES_NO_FENV_ACCESS
+  EXPECT_EQ(std::fetestexcept(FE_ALL_EXCEPT & ~FE_INEXACT), 0);
+#endif
+}
+
+TEST(Jet, FminJetWithJet) {
   Fenv env;
   // Clear all exceptions to ensure none are set by the following function
   // calls.
@@ -716,14 +745,47 @@ TEST(Jet, Fmin) {
 
   EXPECT_THAT(fmin(x, y), IsAlmostEqualTo(y));
   EXPECT_THAT(fmin(y, x), IsAlmostEqualTo(y));
+
+  // Average the Jets on equality (of scalar parts).
+  const J scalar_part_only_equal_to_x = J(x.a, 2 * x.v);
+  const J average = (x + scalar_part_only_equal_to_x) * 0.5;
+  EXPECT_THAT(fmin(x, scalar_part_only_equal_to_x), IsAlmostEqualTo(average));
+  EXPECT_THAT(fmin(scalar_part_only_equal_to_x, x), IsAlmostEqualTo(average));
+
+  // Follow convention of fmin(): treat NANs as missing values.
+  const J nan_scalar_part(std::numeric_limits<double>::quiet_NaN(), 2 * x.v);
+  EXPECT_THAT(fmin(x, nan_scalar_part), IsAlmostEqualTo(x));
+  EXPECT_THAT(fmin(nan_scalar_part, x), IsAlmostEqualTo(x));
+
+#ifndef CERES_NO_FENV_ACCESS
+  EXPECT_EQ(std::fetestexcept(FE_ALL_EXCEPT & ~FE_INEXACT), 0);
+#endif
+}
+
+TEST(Jet, FminJetWithScalar) {
+  Fenv env;
+  // Clear all exceptions to ensure none are set by the following function
+  // calls.
+  std::feclearexcept(FE_ALL_EXCEPT);
+
   EXPECT_THAT(fmin(x, y.a), IsAlmostEqualTo(J{y.a}));
   EXPECT_THAT(fmin(y.a, x), IsAlmostEqualTo(J{y.a}));
   EXPECT_THAT(fmin(y, x.a), IsAlmostEqualTo(y));
   EXPECT_THAT(fmin(x.a, y), IsAlmostEqualTo(y));
+
+  // Average the Jet and scalar cast to a Jet on equality (of scalar parts).
+  const J average = (x + J{x.a}) * 0.5;
+  EXPECT_THAT(fmin(x, x.a), IsAlmostEqualTo(average));
+  EXPECT_THAT(fmin(x.a, x), IsAlmostEqualTo(average));
+
+  // Follow convention of fmin(): treat NANs as missing values.
   EXPECT_THAT(fmin(x, std::numeric_limits<double>::quiet_NaN()),
               IsAlmostEqualTo(x));
   EXPECT_THAT(fmin(std::numeric_limits<double>::quiet_NaN(), x),
               IsAlmostEqualTo(x));
+  const J nan_scalar_part(std::numeric_limits<double>::quiet_NaN(), 2 * x.v);
+  EXPECT_THAT(fmin(nan_scalar_part, x.a), IsAlmostEqualTo(J{x.a}));
+  EXPECT_THAT(fmin(x.a, nan_scalar_part), IsAlmostEqualTo(J{x.a}));
 
 #ifndef CERES_NO_FENV_ACCESS
   EXPECT_EQ(std::fetestexcept(FE_ALL_EXCEPT & ~FE_INEXACT), 0);
@@ -1292,8 +1354,7 @@ TYPED_TEST(JetTest, Nested3XComparison) {
 
 #endif  // GTEST_HAS_TYPED_TEST
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal
 
 #ifdef _MSC_VER
 #pragma float_control(pop)

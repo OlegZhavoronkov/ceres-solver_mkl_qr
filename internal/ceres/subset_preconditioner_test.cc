@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2017 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,6 +31,7 @@
 #include "ceres/subset_preconditioner.h"
 
 #include <memory>
+#include <random>
 
 #include "Eigen/Dense"
 #include "Eigen/SparseCore"
@@ -42,8 +43,7 @@
 #include "glog/logging.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 namespace {
 
@@ -68,7 +68,8 @@ bool ComputeExpectedSolution(const CompressedRowSparseMatrix& lhs,
                              Vector* solution) {
   Matrix dense_triangular_lhs;
   lhs.ToDenseMatrix(&dense_triangular_lhs);
-  if (lhs.storage_type() == CompressedRowSparseMatrix::UPPER_TRIANGULAR) {
+  if (lhs.storage_type() ==
+      CompressedRowSparseMatrix::StorageType::UPPER_TRIANGULAR) {
     Matrix full_lhs = dense_triangular_lhs.selfadjointView<Eigen::Upper>();
     return SolveLinearSystemUsingEigen<Eigen::Upper>(full_lhs, rhs, solution);
   }
@@ -100,13 +101,13 @@ class SubsetPreconditionerTest : public ::testing::TestWithParam<Param> {
     options.max_row_block_size = 4;
     options.block_density = 0.9;
 
-    m_ = BlockSparseMatrix::CreateRandomMatrix(options);
+    m_ = BlockSparseMatrix::CreateRandomMatrix(options, prng_);
     start_row_block_ = m_->block_structure()->rows.size();
 
     // Ensure that the bottom part of the matrix has the same column
     // block structure.
     options.col_blocks = m_->block_structure()->cols;
-    b_ = BlockSparseMatrix::CreateRandomMatrix(options);
+    b_ = BlockSparseMatrix::CreateRandomMatrix(options, prng_);
     m_->AppendRows(*b_);
 
     // Create a Identity block diagonal matrix with the same column
@@ -121,7 +122,7 @@ class SubsetPreconditionerTest : public ::testing::TestWithParam<Param> {
     // either case the preconditioner matrix is b_' b + D'D.
     b_->AppendRows(*block_diagonal_);
     inner_product_computer_ = InnerProductComputer::Create(
-        *b_, CompressedRowSparseMatrix::UPPER_TRIANGULAR);
+        *b_, CompressedRowSparseMatrix::StorageType::UPPER_TRIANGULAR);
     inner_product_computer_->Compute();
   }
 
@@ -132,6 +133,7 @@ class SubsetPreconditionerTest : public ::testing::TestWithParam<Param> {
   std::unique_ptr<Preconditioner> preconditioner_;
   Vector diagonal_;
   int start_row_block_;
+  std::mt19937 prng_;
 };
 
 TEST_P(SubsetPreconditionerTest, foo) {
@@ -159,7 +161,7 @@ TEST_P(SubsetPreconditionerTest, foo) {
     EXPECT_TRUE(ComputeExpectedSolution(*lhs, rhs, &expected));
 
     Vector actual(lhs->num_rows());
-    preconditioner_->RightMultiply(rhs.data(), actual.data());
+    preconditioner_->RightMultiplyAndAccumulate(rhs.data(), actual.data());
 
     Matrix eigen_lhs;
     lhs->ToDenseMatrix(&eigen_lhs);
@@ -181,14 +183,6 @@ INSTANTIATE_TEST_SUITE_P(SubsetPreconditionerWithSuiteSparse,
                          ParamInfoToString);
 #endif
 
-#ifndef CERES_NO_CXSPARSE
-INSTANTIATE_TEST_SUITE_P(SubsetPreconditionerWithCXSparse,
-                         SubsetPreconditionerTest,
-                         ::testing::Combine(::testing::Values(CX_SPARSE),
-                                            ::testing::Values(true, false)),
-                         ParamInfoToString);
-#endif
-
 #ifndef CERES_NO_ACCELERATE_SPARSE
 INSTANTIATE_TEST_SUITE_P(
     SubsetPreconditionerWithAccelerateSparse,
@@ -206,5 +200,4 @@ INSTANTIATE_TEST_SUITE_P(SubsetPreconditionerWithEigenSparse,
                          ParamInfoToString);
 #endif
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

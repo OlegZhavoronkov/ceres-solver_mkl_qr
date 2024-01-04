@@ -7,7 +7,7 @@
 #
 # * Redistributions of source code must retain the above copyright notice,
 #   this list of conditions and the following disclaimer.
-# * Redistributions in binary form must reproduce the above copyright notice,
+# * Redistributions in binary form %Cmust reproduce the above copyright notice,
 #   this list of conditions and the following disclaimer in the documentation
 #   and/or other materials provided with the distribution.
 # * Neither the name of Google Inc. nor the names of its contributors may be
@@ -28,19 +28,14 @@
 #
 # Author: keir@google.com (Keir Mierle)
 
+# Build the list of dependencies for Ceres based on the current configuration.
+
 # Avoid 'xxx.cc has no symbols' warnings from source files which are 'empty'
 # when their enclosing #ifdefs are disabled.
-if (CERES_THREADING_MODEL STREQUAL "CXX_THREADS")
-  set(CERES_PARALLEL_FOR_SRC parallel_for_cxx.cc thread_pool.cc)
-elseif (CERES_THREADING_MODEL STREQUAL "OPENMP")
-  set(CERES_PARALLEL_FOR_SRC parallel_for_openmp.cc)
-  if (CMAKE_COMPILER_IS_GNUCXX)
-    # OpenMP in GCC requires the GNU OpenMP library.
-    list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES gomp)
-  endif()
-elseif (CERES_THREADING_MODEL STREQUAL "NO_THREADS")
-  set(CERES_PARALLEL_FOR_SRC parallel_for_nothreads.cc)
-endif()
+find_package(Threads REQUIRED)
+list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES Threads::Threads)
+# Make dependency visible to the parent CMakeLists.txt
+set(Threads_DEPENDENCY "find_dependency (Threads)" PARENT_SCOPE)
 
 # Source files that contain public symbols and live in the ceres namespaces.
 # Such symbols are expected to be marked with CERES_EXPORT and the files below
@@ -49,7 +44,6 @@ set(CERES_EXPORTED_SRCS
     c_api.cc
     gradient_checker.cc
     gradient_problem.cc
-    local_parameterization.cc
     loss_function.cc
     manifold.cc
     normal_prior.cc
@@ -87,19 +81,9 @@ endif (SCHUR_SPECIALIZATIONS)
 # to a different value than Eigen's default.  Depending on the order of files
 # in the unity build this can lead to clashes.  Additionally, these files are
 # already generated in a way which leads to fairly large compilation units,
-# so the gains from a unity build would be marginal.  Since this property is
-# not available before cmake 3.16, unity build is only available from this
-# version on.
-if (NOT CMAKE_VERSION VERSION_LESS 3.16)
-  set_source_files_properties(${CERES_INTERNAL_SCHUR_FILES} PROPERTIES
-    SKIP_UNITY_BUILD_INCLUSION ON)
-elseif(CMAKE_UNITY_BUILD)
-  message(FATAL_ERROR "Unity build requires cmake 3.16 or newer.  Please unset CMAKE_UNITY_BUILD.")
-endif()
-
-# Build the list of dependencies for Ceres based on the current configuration.
-find_package(Threads QUIET)
-list(APPEND CERES_LIBRARY_PUBLIC_DEPENDENCIES Threads::Threads)
+# so the gains from a unity build would be marginal.
+set_source_files_properties(${CERES_INTERNAL_SCHUR_FILES} PROPERTIES
+  SKIP_UNITY_BUILD_INCLUSION ON)
 
 if (NOT MINIGLOG AND GLOG_FOUND)
   list(APPEND CERES_LIBRARY_PUBLIC_DEPENDENCIES ${GLOG_LIBRARIES})
@@ -118,36 +102,38 @@ if (SUITESPARSE AND SuiteSparse_FOUND)
   add_definitions(-DCERES_SUITESPARSE_VERSION="${SuiteSparse_VERSION}")
   list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES SuiteSparse::CHOLMOD
     SuiteSparse::SPQR)
+
+  if (SuiteSparse_Partition_FOUND)
+    list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES SuiteSparse::Partition)
+  endif (SuiteSparse_Partition_FOUND)
 endif (SUITESPARSE AND SuiteSparse_FOUND)
 
-if (CXSPARSE AND CXSparse_FOUND)
+if (SuiteSparse_Partition_FOUND OR EIGENMETIS)
   # Define version information for use in Solver::FullReport.
-  add_definitions(-DCERES_CXSPARSE_VERSION="${CXSparse_VERSION}")
-  list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES CXSparse::CXSparse)
-endif (CXSPARSE AND CXSparse_FOUND)
+  add_definitions(-DCERES_METIS_VERSION="${METIS_VERSION}")
+  list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES METIS::METIS)
+endif (SuiteSparse_Partition_FOUND OR EIGENMETIS)
 
 if (ACCELERATESPARSE AND AccelerateSparse_FOUND)
   list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES ${AccelerateSparse_LIBRARIES})
 endif()
 
-if (CUDA_FOUND)
-  list(APPEND
-       CERES_LIBRARY_PRIVATE_DEPENDENCIES
-       ${CUDA_LIBRARIES}
-       ${CUDA_cublas_LIBRARY}
-       ${CUDA_cusolver_LIBRARY}
-       ${CUDA_cusparse_LIBRARY})
-  if (BUILD_TESTING)
-    add_test(
-        NAME cuda_memcheck_dense_qr_test
-        COMMAND cuda-memcheck --leak-check full
-            $<TARGET_FILE:cuda_dense_qr_test>)
-    add_test(
-        NAME cuda_memcheck_dense_cholesky_test
-        COMMAND cuda-memcheck --leak-check full
-            $<TARGET_FILE:cuda_dense_cholesky_test>)
-  endif (BUILD_TESTING)
-endif (CUDA_FOUND)
+if (USE_CUDA)
+  list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES
+    CUDA::cublas
+    CUDA::cudart
+    CUDA::cusolver
+    CUDA::cusparse)
+  set_source_files_properties(cuda_kernels_vector_ops.cu.cc PROPERTIES LANGUAGE CUDA)
+  set_source_files_properties(cuda_kernels_bsm_to_crs.cu.cc PROPERTIES LANGUAGE CUDA)
+  add_library(ceres_cuda_kernels STATIC cuda_kernels_vector_ops.cu.cc cuda_kernels_bsm_to_crs.cu.cc)
+  target_compile_features(ceres_cuda_kernels PRIVATE cxx_std_14)
+  target_compile_definitions(ceres_cuda_kernels PRIVATE CERES_STATIC_DEFINE)
+  # Enable __host__ / __device__ annotations in lambda declarations
+  target_compile_options(ceres_cuda_kernels PRIVATE --extended-lambda)
+  target_include_directories(ceres_cuda_kernels PRIVATE  ${Ceres_SOURCE_DIR}/include  ${Ceres_SOURCE_DIR}/internal ${Ceres_BINARY_DIR}/${CMAKE_INSTALL_INCLUDEDIR})
+  list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES ceres_cuda_kernels)
+endif (USE_CUDA)
 
 if (LAPACK_FOUND)
   list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES ${LAPACK_LIBRARIES})
@@ -159,7 +145,6 @@ endif ()
 # lexicographical order.
 add_library(ceres_internal OBJECT
     ${CERES_INTERNAL_SCHUR_FILES}
-    ${CERES_PARALLEL_FOR_SRC}
     accelerate_sparse.cc
     array_utils.cc
     block_evaluate_preparer.cc
@@ -178,7 +163,6 @@ add_library(ceres_internal OBJECT
     compressed_row_jacobian_writer.cc
     compressed_row_sparse_matrix.cc
     conditioned_cost_function.cc
-    conjugate_gradients_solver.cc
     context.cc
     context_impl.cc
     coordinate_descent_minimizer.cc
@@ -186,7 +170,11 @@ add_library(ceres_internal OBJECT
     cost_function.cc
     covariance.cc
     covariance_impl.cc
-    cxsparse.cc
+    cuda_block_sparse_crs_view.cc
+    cuda_partitioned_block_sparse_crs_view.cc
+    cuda_block_structure.cc
+    cuda_sparse_matrix.cc
+    cuda_vector.cc
     dense_cholesky.cc
     dense_normal_cholesky_solver.cc
     dense_qr.cc
@@ -200,9 +188,9 @@ add_library(ceres_internal OBJECT
     eigensparse.cc
     evaluation_callback.cc
     evaluator.cc
+    fake_bundle_adjustment_jacobian.cc
     file.cc
     first_order_function.cc
-    float_cxsparse.cc
     float_suitesparse.cc
     function_sample.cc
     gradient_checking_cost_function.cc
@@ -223,10 +211,13 @@ add_library(ceres_internal OBJECT
     linear_solver.cc
     low_rank_inverse_hessian.cc
     minimizer.cc
+    parallel_invoke.cc
     parallel_utils.cc
+    parallel_vector_ops.cc
     parameter_block_ordering.cc
     partitioned_matrix_view.cc
     polynomial.cc
+    power_series_expansion_preconditioner.cc
     preconditioner.cc
     preprocessor.cc
     problem_impl.cc
@@ -247,6 +238,7 @@ add_library(ceres_internal OBJECT
     stringprintf.cc
     subset_preconditioner.cc
     suitesparse.cc
+    thread_pool.cc
     thread_token_provider.cc
     triplet_sparse_matrix.cc
     trust_region_minimizer.cc
@@ -320,11 +312,11 @@ target_compile_features(ceres_internal PRIVATE $<TARGET_PROPERTY:ceres,COMPILE_F
 # Ensure the minimum required C++ language version is fulfilled as our
 # requirement by downstream clients. Consumers can choose the same or a newer
 # language standard revision.
-target_compile_features(ceres PUBLIC cxx_std_14)
+target_compile_features(ceres PUBLIC cxx_std_17)
 
 set_target_properties(ceres PROPERTIES
   VERSION ${CERES_VERSION}
-  SOVERSION 3)
+  SOVERSION 4)
 message(STATUS "\${CERES_LIBRARY_PUBLIC_DEPENDENCIES} \"${CERES_LIBRARY_PUBLIC_DEPENDENCIES}\" \${CERES_LIBRARY_PRIVATE_DEPENDENCIES} \"${CERES_LIBRARY_PRIVATE_DEPENDENCIES}\"")
 target_link_libraries(ceres
   PUBLIC ${CERES_LIBRARY_PUBLIC_DEPENDENCIES}
@@ -379,10 +371,6 @@ if (ACCELERATESPARSE)
   list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES_INCLUDE_DIRS
     ${AccelerateSparse_INCLUDE_DIRS})
 endif()
-if (CUDA)
-  list(APPEND CERES_LIBRARY_PRIVATE_DEPENDENCIES_INCLUDE_DIRS
-    ${CUDA_INCLUDE_DIRS})
-endif()
 # Add include locations for optional dependencies to the Ceres target without
 # duplication.
 list(REMOVE_DUPLICATES CERES_LIBRARY_PRIVATE_DEPENDENCIES_INCLUDE_DIRS)
@@ -395,6 +383,14 @@ include(GenerateExportHeader)
 generate_export_header(ceres EXPORT_FILE_NAME
   ${Ceres_BINARY_DIR}/${CMAKE_INSTALL_INCLUDEDIR}/ceres/internal/export.h)
 
+if (USE_CUDA)
+  install(TARGETS ceres_cuda_kernels
+          EXPORT  CeresExport
+          RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+          LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif(USE_CUDA)
+
 install(TARGETS ceres
         EXPORT  CeresExport
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -405,6 +401,9 @@ if (BUILD_TESTING AND GFLAGS)
   add_library(gtest STATIC gmock_gtest_all.cc gmock_main.cc)
 
   target_include_directories(gtest PRIVATE ${Ceres_SOURCE_DIR}/internal/ceres)
+  if (CMAKE_SYSTEM_NAME MATCHES "QNX")
+    target_link_libraries(gtest PUBLIC regex)
+  endif()
   target_link_libraries(gtest PRIVATE Ceres::ceres gflags)
 
   add_library(test_util STATIC
@@ -424,7 +423,11 @@ if (BUILD_TESTING AND GFLAGS)
     target_include_directories(${NAME}_test
       PRIVATE ${Ceres_SOURCE_DIR}/internal/ceres
               ${CERES_LIBRARY_PRIVATE_DEPENDENCIES_INCLUDE_DIRS})
-    target_link_libraries(${NAME}_test PRIVATE gtest test_util ceres_static)
+    # Some tests include direct references/includes of private dependency
+    # headers which are not propagated via the ceres targets, so link them
+    # explicitly.
+    target_link_libraries(${NAME}_test PRIVATE gtest test_util ceres_static
+      ${CERES_LIBRARY_PRIVATE_DEPENDENCIES})
 
     # covariance_test uses SuiteSparseQR.hpp. However, since SuiteSparse import
     # targets are private (link only) dependencies not propagated to consumers,
@@ -444,7 +447,6 @@ if (BUILD_TESTING AND GFLAGS)
   ceres_test(autodiff)
   ceres_test(autodiff_first_order_function)
   ceres_test(autodiff_cost_function)
-  ceres_test(autodiff_local_parameterization)
   ceres_test(autodiff_manifold)
   ceres_test(block_jacobi_preconditioner)
   ceres_test(block_random_access_dense_matrix)
@@ -462,8 +464,15 @@ if (BUILD_TESTING AND GFLAGS)
   ceres_test(cost_function_to_functor)
   ceres_test(covariance)
   ceres_test(cubic_interpolation)
+  ceres_test(cuda_partitioned_block_sparse_crs_view)
+  ceres_test(cuda_block_sparse_crs_view)
+  ceres_test(cuda_block_structure)
   ceres_test(cuda_dense_cholesky)
   ceres_test(cuda_dense_qr)
+  ceres_test(cuda_kernels_vector_ops)
+  ceres_test(cuda_sparse_matrix)
+  ceres_test(cuda_streamed_buffer)
+  ceres_test(cuda_vector)
   ceres_test(dense_linear_solver)
   ceres_test(dense_cholesky)
   ceres_test(dense_qr)
@@ -497,7 +506,6 @@ if (BUILD_TESTING AND GFLAGS)
   ceres_test(levenberg_marquardt_strategy)
   ceres_test(line_search_minimizer)
   ceres_test(line_search_preprocessor)
-  ceres_test(local_parameterization)
   ceres_test(loss_function)
   ceres_test(manifold)
   ceres_test(minimizer)
@@ -512,6 +520,7 @@ if (BUILD_TESTING AND GFLAGS)
   ceres_test(parameter_dims)
   ceres_test(partitioned_matrix_view)
   ceres_test(polynomial)
+  ceres_test(power_series_expansion_preconditioner)
   ceres_test(problem)
   ceres_test(program)
   ceres_test(reorder_program)
@@ -545,11 +554,17 @@ macro(add_dependencies_to_benchmark BENCHMARK_TARGET)
   target_include_directories(${BENCHMARK_TARGET}
     PRIVATE ${Ceres_SOURCE_DIR}/internal
             ${CERES_LIBRARY_PRIVATE_DEPENDENCIES_INCLUDE_DIRS})
+  # Benchmarks include direct references/includes of private dependency headers
+  # which are not propagated via the ceres targets, so link them explicitly.
   target_link_libraries(${BENCHMARK_TARGET}
-    PRIVATE benchmark::benchmark ceres_static)
+    PRIVATE benchmark::benchmark ceres_static
+            ${CERES_LIBRARY_PRIVATE_DEPENDENCIES})
 endmacro()
 
 if (BUILD_BENCHMARKS)
+  add_executable(evaluation_benchmark evaluation_benchmark.cc)
+  add_dependencies_to_benchmark(evaluation_benchmark)
+
   add_executable(small_blas_gemv_benchmark small_blas_gemv_benchmark.cc)
   add_dependencies_to_benchmark(small_blas_gemv_benchmark)
 
@@ -567,6 +582,19 @@ if (BUILD_BENCHMARKS)
 
   add_executable(dense_linear_solver_benchmark dense_linear_solver_benchmark.cc)
   add_dependencies_to_benchmark(dense_linear_solver_benchmark)
+
+  add_executable(spmv_benchmark spmv_benchmark.cc)
+  add_dependencies_to_benchmark(spmv_benchmark)
+
+  add_executable(parallel_vector_operations_benchmark parallel_vector_operations_benchmark.cc)
+  add_dependencies_to_benchmark(parallel_vector_operations_benchmark)
+
+  add_executable(parallel_for_benchmark parallel_for_benchmark.cc)
+  add_dependencies_to_benchmark(parallel_for_benchmark)
+
+  add_executable(block_jacobi_preconditioner_benchmark
+    block_jacobi_preconditioner_benchmark.cc)
+  add_dependencies_to_benchmark(block_jacobi_preconditioner_benchmark)
 
   add_subdirectory(autodiff_benchmarks)
 endif (BUILD_BENCHMARKS)

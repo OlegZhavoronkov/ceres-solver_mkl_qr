@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2018 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -34,8 +34,7 @@
 #include "benchmark/benchmark.h"
 #include "ceres/small_blas.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 // Benchmarking matrix-matrix multiply routines and optimizing memory
 // access requires that we make sure that they are not just sitting in
@@ -47,8 +46,8 @@ namespace internal {
 // benchmark.
 class MatrixMatrixMultiplyData {
  public:
-  MatrixMatrixMultiplyData(int a_rows, int a_cols, int b_rows, int b_cols,
-                           int c_rows, int c_cols)
+  MatrixMatrixMultiplyData(
+      int a_rows, int a_cols, int b_rows, int b_cols, int c_rows, int c_cols)
       : num_elements_(1000),
         a_size_(num_elements_ * a_rows * a_cols),
         b_size_(b_rows * b_cols),
@@ -84,14 +83,22 @@ class MatrixMatrixMultiplyData {
     const int c_cols = K;                                                   \
     const int a_rows = b_rows;                                              \
     const int a_cols = c_cols;                                              \
-    MatrixMatrixMultiplyData data(a_rows, a_cols, b_rows, b_cols, c_rows,   \
-                                  c_cols);                                  \
+    MatrixMatrixMultiplyData data(                                          \
+        a_rows, a_cols, b_rows, b_cols, c_rows, c_cols);                    \
     const int num_elements = data.num_elements();                           \
     int iter = 0;                                                           \
     for (auto _ : state) {                                                  \
-      FN<MT, KT, KT, NT, GEMM_KIND_ADD>(                                    \
-          data.GetB(iter), b_rows, b_cols, data.GetC(iter), c_rows, c_cols, \
-          data.GetA(iter), 512, 512, a_rows, a_cols);                       \
+      FN<MT, KT, KT, NT, GEMM_KIND_ADD>(data.GetB(iter),                    \
+                                        b_rows,                             \
+                                        b_cols,                             \
+                                        data.GetC(iter),                    \
+                                        c_rows,                             \
+                                        c_cols,                             \
+                                        data.GetA(iter),                    \
+                                        512,                                \
+                                        512,                                \
+                                        a_rows,                             \
+                                        a_cols);                            \
       iter = (iter + 1) % num_elements;                                     \
     }                                                                       \
   }                                                                         \
@@ -99,9 +106,9 @@ class MatrixMatrixMultiplyData {
 
 #define BENCHMARK_STATIC_MM_FN(FN, M, N, K) \
   BENCHMARK_MM_FN(FN, M, N, K, Static, M, N, K)
-#define BENCHMARK_DYNAMIC_MM_FN(FN, M, N, K)                            \
-  BENCHMARK_MM_FN(FN, M, N, K, Dynamic, Eigen::Dynamic, Eigen::Dynamic, \
-                  Eigen::Dynamic)
+#define BENCHMARK_DYNAMIC_MM_FN(FN, M, N, K) \
+  BENCHMARK_MM_FN(                           \
+      FN, M, N, K, Dynamic, Eigen::Dynamic, Eigen::Dynamic, Eigen::Dynamic)
 
 #define BENCHMARK_MTM_FN(FN, M, N, K, NAME, MT, NT, KT)                     \
   void static BM_##FN##_##NAME##_##M##x##N##x##K(benchmark::State& state) { \
@@ -111,14 +118,22 @@ class MatrixMatrixMultiplyData {
     const int c_cols = K;                                                   \
     const int a_rows = b_cols;                                              \
     const int a_cols = c_cols;                                              \
-    MatrixMatrixMultiplyData data(a_rows, a_cols, b_rows, b_cols, c_rows,   \
-                                  c_cols);                                  \
+    MatrixMatrixMultiplyData data(                                          \
+        a_rows, a_cols, b_rows, b_cols, c_rows, c_cols);                    \
     const int num_elements = data.num_elements();                           \
     int iter = 0;                                                           \
     for (auto _ : state) {                                                  \
-      FN<KT, MT, KT, NT, GEMM_KIND_ADD>(                                    \
-          data.GetB(iter), b_rows, b_cols, data.GetC(iter), c_rows, c_cols, \
-          data.GetA(iter), 0, 0, a_rows, a_cols);                           \
+      FN<KT, MT, KT, NT, GEMM_KIND_ADD>(data.GetB(iter),                    \
+                                        b_rows,                             \
+                                        b_cols,                             \
+                                        data.GetC(iter),                    \
+                                        c_rows,                             \
+                                        c_cols,                             \
+                                        data.GetA(iter),                    \
+                                        0,                                  \
+                                        0,                                  \
+                                        a_rows,                             \
+                                        a_cols);                            \
       iter = (iter + 1) % num_elements;                                     \
     }                                                                       \
   }                                                                         \
@@ -126,9 +141,9 @@ class MatrixMatrixMultiplyData {
 
 #define BENCHMARK_STATIC_MMT_FN(FN, M, N, K) \
   BENCHMARK_MTM_FN(FN, M, N, K, Static, M, N, K)
-#define BENCHMARK_DYNAMIC_MMT_FN(FN, M, N, K)                            \
-  BENCHMARK_MTM_FN(FN, M, N, K, Dynamic, Eigen::Dynamic, Eigen::Dynamic, \
-                   Eigen::Dynamic)
+#define BENCHMARK_DYNAMIC_MMT_FN(FN, M, N, K) \
+  BENCHMARK_MTM_FN(                           \
+      FN, M, N, K, Dynamic, Eigen::Dynamic, Eigen::Dynamic, Eigen::Dynamic)
 
 BENCHMARK_STATIC_MM_FN(MatrixMatrixMultiplyEigen, 2, 3, 4)
 BENCHMARK_STATIC_MM_FN(MatrixMatrixMultiplyEigen, 3, 3, 3)
@@ -197,7 +212,6 @@ BENCHMARK_DYNAMIC_MMT_FN(MatrixTransposeMatrixMultiplyNaive, 3, 9, 9)
 #undef BENCHMARK_DYNAMIC_MMT_FN
 #undef BENCHMARK_STATIC_MMT_FN
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal
 
 BENCHMARK_MAIN();

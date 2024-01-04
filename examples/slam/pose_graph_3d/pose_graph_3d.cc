@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -41,8 +41,7 @@
 
 DEFINE_string(input, "", "The pose graph definition filename in g2o format.");
 
-namespace ceres {
-namespace examples {
+namespace ceres::examples {
 namespace {
 
 // Constructs the nonlinear least squares optimization problem from the pose
@@ -133,8 +132,7 @@ bool OutputPoses(const std::string& filename, const MapOfPoses& poses) {
 }
 
 }  // namespace
-}  // namespace examples
-}  // namespace ceres
+}  // namespace ceres::examples
 
 int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);

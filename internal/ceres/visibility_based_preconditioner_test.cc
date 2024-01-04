@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2015 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -47,8 +47,7 @@
 #include "glog/logging.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 // TODO(sameeragarwal): Re-enable this test once serialization is
 // working again.
@@ -277,7 +276,7 @@ namespace internal {
 //     y.setZero();
 //     z.setZero();
 //     x[i] = 1.0;
-//     preconditioner_->RightMultiply(x.data(), y.data());
+//     preconditioner_->RightMultiplyAndAccumulate(x.data(), y.data());
 //     z = full_schur_complement
 //         .selfadjointView<Eigen::Upper>()
 //         .llt().solve(x);
@@ -340,5 +339,4 @@ namespace internal {
 //   EXPECT_TRUE(PreconditionerValuesMatch());
 // }
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

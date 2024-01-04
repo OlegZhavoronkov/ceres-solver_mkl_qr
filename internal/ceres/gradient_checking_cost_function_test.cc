@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2015 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,16 +33,15 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <random>
 #include <vector>
 
 #include "ceres/cost_function.h"
-#include "ceres/local_parameterization.h"
 #include "ceres/loss_function.h"
 #include "ceres/manifold.h"
 #include "ceres/parameter_block.h"
 #include "ceres/problem_impl.h"
 #include "ceres/program.h"
-#include "ceres/random.h"
 #include "ceres/residual_block.h"
 #include "ceres/sized_cost_function.h"
 #include "ceres/types.h"
@@ -50,10 +49,8 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
-using std::vector;
 using testing::_;
 using testing::AllOf;
 using testing::AnyNumber;
@@ -71,13 +68,15 @@ class TestTerm : public CostFunction {
  public:
   // The constructor of this function needs to know the number
   // of blocks desired, and the size of each block.
-  TestTerm(int arity, int const* dim) : arity_(arity) {
+  template <class UniformRandomFunctor>
+  TestTerm(int arity, int const* dim, UniformRandomFunctor&& randu)
+      : arity_(arity) {
     // Make 'arity' random vectors.
     a_.resize(arity_);
     for (int j = 0; j < arity_; ++j) {
       a_[j].resize(dim[j]);
       for (int u = 0; u < dim[j]; ++u) {
-        a_[j][u] = 2.0 * RandDouble() - 1.0;
+        a_[j][u] = randu();
       }
     }
 
@@ -128,29 +127,30 @@ class TestTerm : public CostFunction {
 
  private:
   int arity_;
-  vector<vector<double>> a_;
+  std::vector<std::vector<double>> a_;
 };
 
 TEST(GradientCheckingCostFunction, ResidualsAndJacobiansArePreservedTest) {
-  srand(5);
-
   // Test with 3 blocks of size 2, 3 and 4.
   int const arity = 3;
   int const dim[arity] = {2, 3, 4};
 
   // Make a random set of blocks.
-  vector<double*> parameters(arity);
+  std::vector<double*> parameters(arity);
+  std::mt19937 prng;
+  std::uniform_real_distribution<double> distribution(-1.0, 1.0);
+  auto randu = [&prng, &distribution] { return distribution(prng); };
   for (int j = 0; j < arity; ++j) {
     parameters[j] = new double[dim[j]];
     for (int u = 0; u < dim[j]; ++u) {
-      parameters[j][u] = 2.0 * RandDouble() - 1.0;
+      parameters[j][u] = randu();
     }
   }
 
   double original_residual;
   double residual;
-  vector<double*> original_jacobians(arity);
-  vector<double*> jacobians(arity);
+  std::vector<double*> original_jacobians(arity);
+  std::vector<double*> jacobians(arity);
 
   for (int j = 0; j < arity; ++j) {
     // Since residual is one dimensional the jacobians have the same
@@ -162,7 +162,7 @@ TEST(GradientCheckingCostFunction, ResidualsAndJacobiansArePreservedTest) {
   const double kRelativeStepSize = 1e-6;
   const double kRelativePrecision = 1e-4;
 
-  TestTerm<-1, -1> term(arity, dim);
+  TestTerm<-1, -1> term(arity, dim, randu);
   GradientCheckingIterationCallback callback;
   auto gradient_checking_cost_function =
       CreateGradientCheckingCostFunction(&term,
@@ -189,23 +189,24 @@ TEST(GradientCheckingCostFunction, ResidualsAndJacobiansArePreservedTest) {
 }
 
 TEST(GradientCheckingCostFunction, SmokeTest) {
-  srand(5);
-
   // Test with 3 blocks of size 2, 3 and 4.
   int const arity = 3;
   int const dim[arity] = {2, 3, 4};
 
   // Make a random set of blocks.
-  vector<double*> parameters(arity);
+  std::vector<double*> parameters(arity);
+  std::mt19937 prng;
+  std::uniform_real_distribution<double> distribution(-1.0, 1.0);
+  auto randu = [&prng, &distribution] { return distribution(prng); };
   for (int j = 0; j < arity; ++j) {
     parameters[j] = new double[dim[j]];
     for (int u = 0; u < dim[j]; ++u) {
-      parameters[j][u] = 2.0 * RandDouble() - 1.0;
+      parameters[j][u] = randu();
     }
   }
 
   double residual;
-  vector<double*> jacobians(arity);
+  std::vector<double*> jacobians(arity);
   for (int j = 0; j < arity; ++j) {
     // Since residual is one dimensional the jacobians have the same size as the
     // parameter blocks.
@@ -218,7 +219,7 @@ TEST(GradientCheckingCostFunction, SmokeTest) {
   // Should have one term that's bad, causing everything to get dumped.
   LOG(INFO) << "Bad gradient";
   {
-    TestTerm<1, 2> term(arity, dim);
+    TestTerm<1, 2> term(arity, dim, randu);
     GradientCheckingIterationCallback callback;
     auto gradient_checking_cost_function =
         CreateGradientCheckingCostFunction(&term,
@@ -238,7 +239,7 @@ TEST(GradientCheckingCostFunction, SmokeTest) {
   // The gradient is correct, so no errors are reported.
   LOG(INFO) << "Good gradient";
   {
-    TestTerm<-1, -1> term(arity, dim);
+    TestTerm<-1, -1> term(arity, dim, randu);
     GradientCheckingIterationCallback callback;
     auto gradient_checking_cost_function =
         CreateGradientCheckingCostFunction(&term,
@@ -335,85 +336,6 @@ static void ParameterBlocksAreEquivalent(const ParameterBlock* left,
   EXPECT_EQ(left->TangentSize(), right->TangentSize());
   EXPECT_EQ(left->manifold(), right->manifold());
   EXPECT_EQ(left->IsConstant(), right->IsConstant());
-}
-
-TEST(GradientCheckingProblemImpl,
-     ProblemDimensionsMatchUsingLocalParameterization) {
-  // Parameter blocks with arbitrarily chosen initial values.
-  double x[] = {1.0, 2.0, 3.0};
-  double y[] = {4.0, 5.0, 6.0, 7.0};
-  double z[] = {8.0, 9.0, 10.0, 11.0, 12.0};
-  double w[] = {13.0, 14.0, 15.0, 16.0};
-
-  ProblemImpl problem_impl;
-  problem_impl.AddParameterBlock(x, 3);
-  problem_impl.AddParameterBlock(y, 4);
-  problem_impl.SetParameterBlockConstant(y);
-  problem_impl.AddParameterBlock(z, 5);
-  problem_impl.AddParameterBlock(w, 4, new QuaternionParameterization);
-  // clang-format off
-  problem_impl.AddResidualBlock(new UnaryCostFunction(2, 3),
-                                nullptr, x);
-  problem_impl.AddResidualBlock(new BinaryCostFunction(6, 5, 4),
-                                nullptr, z, y);
-  problem_impl.AddResidualBlock(new BinaryCostFunction(3, 3, 5),
-                                new TrivialLoss, x, z);
-  problem_impl.AddResidualBlock(new BinaryCostFunction(7, 5, 3),
-                                nullptr, z, x);
-  problem_impl.AddResidualBlock(new TernaryCostFunction(1, 5, 3, 4),
-                                nullptr, z, x, y);
-  // clang-format on
-
-  GradientCheckingIterationCallback callback;
-  auto gradient_checking_problem_impl =
-      CreateGradientCheckingProblemImpl(&problem_impl, 1.0, 1.0, &callback);
-
-  // The dimensions of the two problems match.
-  EXPECT_EQ(problem_impl.NumParameterBlocks(),
-            gradient_checking_problem_impl->NumParameterBlocks());
-  EXPECT_EQ(problem_impl.NumResidualBlocks(),
-            gradient_checking_problem_impl->NumResidualBlocks());
-
-  EXPECT_EQ(problem_impl.NumParameters(),
-            gradient_checking_problem_impl->NumParameters());
-  EXPECT_EQ(problem_impl.NumResiduals(),
-            gradient_checking_problem_impl->NumResiduals());
-
-  const Program& program = problem_impl.program();
-  const Program& gradient_checking_program =
-      gradient_checking_problem_impl->program();
-
-  // Since we added the ParameterBlocks and ResidualBlocks explicitly,
-  // they should be in the same order in the two programs. It is
-  // possible that may change due to implementation changes to
-  // Program. This is not expected to be the case and writing code to
-  // anticipate that possibility not worth the extra complexity in
-  // this test.
-  for (int i = 0; i < program.parameter_blocks().size(); ++i) {
-    ParameterBlocksAreEquivalent(
-        program.parameter_blocks()[i],
-        gradient_checking_program.parameter_blocks()[i]);
-  }
-
-  for (int i = 0; i < program.residual_blocks().size(); ++i) {
-    // Compare the sizes of the two ResidualBlocks.
-    const ResidualBlock* original_residual_block = program.residual_blocks()[i];
-    const ResidualBlock* new_residual_block =
-        gradient_checking_program.residual_blocks()[i];
-    EXPECT_EQ(original_residual_block->NumParameterBlocks(),
-              new_residual_block->NumParameterBlocks());
-    EXPECT_EQ(original_residual_block->NumResiduals(),
-              new_residual_block->NumResiduals());
-    EXPECT_EQ(original_residual_block->NumScratchDoublesForEvaluate(),
-              new_residual_block->NumScratchDoublesForEvaluate());
-
-    // Verify that the ParameterBlocks for the two residuals are equivalent.
-    for (int j = 0; j < original_residual_block->NumParameterBlocks(); ++j) {
-      ParameterBlocksAreEquivalent(
-          original_residual_block->parameter_blocks()[j],
-          new_residual_block->parameter_blocks()[j]);
-    }
-  }
 }
 
 TEST(GradientCheckingProblemImpl, ProblemDimensionsMatch) {
@@ -526,5 +448,4 @@ TEST(GradientCheckingProblemImpl, ConstrainedProblemBoundsArePropagated) {
   }
 }
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

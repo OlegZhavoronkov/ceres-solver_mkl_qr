@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2015 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,8 +32,7 @@
 
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 class QuadraticTestFunction : public ceres::FirstOrderFunction {
  public:
@@ -69,43 +68,7 @@ TEST(GradientProblem, TakesOwnershipOfFirstOrderFunction) {
   EXPECT_TRUE(is_destructed);
 }
 
-TEST(GradientProblem, EvaluationWithoutParameterizationOrGradient) {
-  ceres::GradientProblem problem(new QuadraticTestFunction());
-  double x = 7.0;
-  double cost = 0;
-  problem.Evaluate(&x, &cost, nullptr);
-  EXPECT_EQ(x * x, cost);
-}
-
-TEST(GradientProblem, EvalutaionWithParameterizationAndNoGradient) {
-  ceres::GradientProblem problem(new QuadraticTestFunction(),
-                                 new IdentityParameterization(1));
-  double x = 7.0;
-  double cost = 0;
-  problem.Evaluate(&x, &cost, nullptr);
-  EXPECT_EQ(x * x, cost);
-}
-
-TEST(GradientProblem, EvaluationWithoutParameterizationAndWithGradient) {
-  ceres::GradientProblem problem(new QuadraticTestFunction());
-  double x = 7.0;
-  double cost = 0;
-  double gradient = 0;
-  problem.Evaluate(&x, &cost, &gradient);
-  EXPECT_EQ(2.0 * x, gradient);
-}
-
-TEST(GradientProblem, EvaluationWithParameterizationAndWithGradient) {
-  ceres::GradientProblem problem(new QuadraticTestFunction(),
-                                 new IdentityParameterization(1));
-  double x = 7.0;
-  double cost = 0;
-  double gradient = 0;
-  problem.Evaluate(&x, &cost, &gradient);
-  EXPECT_EQ(2.0 * x, gradient);
-}
-
-TEST(GradientProblem, EvalutaionWithManifoldAndNoGradient) {
+TEST(GradientProblem, EvaluationWithManifoldAndNoGradient) {
   ceres::GradientProblem problem(new QuadraticTestFunction(),
                                  new EuclideanManifold<1>);
   double x = 7.0;
@@ -133,5 +96,4 @@ TEST(GradientProblem, EvaluationWithManifoldAndWithGradient) {
   EXPECT_EQ(2.0 * x, gradient);
 }
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

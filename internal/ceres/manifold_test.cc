@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2022 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -36,6 +36,7 @@
 #include <utility>
 
 #include "Eigen/Geometry"
+#include "ceres/constants.h"
 #include "ceres/dynamic_numeric_diff_cost_function.h"
 #include "ceres/internal/eigen.h"
 #include "ceres/internal/port.h"
@@ -49,8 +50,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 constexpr int kNumTrials = 1000;
 constexpr double kTolerance = 1e-9;
@@ -505,7 +505,7 @@ TEST(QuaternionManifold, PlusPiBy2) {
 
   for (int i = 0; i < 3; ++i) {
     Vector delta = Vector::Zero(3);
-    delta[i] = M_PI / 2;
+    delta[i] = constants::pi / 2;
     Vector x_plus_delta = Vector::Zero(4);
     EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), x_plus_delta.data()));
 
@@ -599,7 +599,7 @@ TEST(QuaternionManifold, DeltaJustBelowPi) {
     const Vector y = RandomQuaternion();
     Vector delta = Vector::Random(3);
     delta.normalize();
-    delta *= (M_PI - 1e-6);
+    delta *= (constants::pi - 1e-6);
     EXPECT_THAT(manifold, QuaternionManifoldPlusIsCorrectAt(x, delta));
     EXPECT_THAT_MANIFOLD_INVARIANTS_HOLD(manifold, x, delta, y, kTolerance);
   }
@@ -670,7 +670,7 @@ TEST(EigenQuaternionManifold, DeltaJustBelowPi) {
     const Vector y = RandomQuaternion();
     Vector delta = Vector::Random(3);
     delta.normalize();
-    delta *= (M_PI - 1e-6);
+    delta *= (constants::pi - 1e-6);
     EXPECT_THAT(manifold, EigenQuaternionManifoldPlusIsCorrectAt(x, delta));
     EXPECT_THAT_MANIFOLD_INVARIANTS_HOLD(manifold, x, delta, y, kTolerance);
   }
@@ -679,18 +679,8 @@ TEST(EigenQuaternionManifold, DeltaJustBelowPi) {
 using Eigen::Vector2d;
 using Eigen::Vector3d;
 using Vector6d = Eigen::Matrix<double, 6, 1>;
-
-// Ensure memory allocated using new in AVX2 builds is correctly aligned which
-// is only guaranteed starting with C++17. Otherwise, use unaligned memory.
-// This avoids a segmentation fault in tests that use
-// EXPECT_THAT_MANIFOLD_INVARIANTS_HOLD and fixed-size Eigen vectors.
-#ifdef CERES_HAS_CPP17
 using Eigen::Vector4d;
 using Vector8d = Eigen::Matrix<double, 8, 1>;
-#else
-using Vector4d = Eigen::Matrix<double, 4, 1, Eigen::DontAlign>;
-using Vector8d = Eigen::Matrix<double, 8, 1, Eigen::DontAlign>;
-#endif
 
 TEST(SphereManifold, ZeroTest) {
   Vector4d x{0.0, 0.0, 0.0, 1.0};
@@ -714,7 +704,7 @@ TEST(SphereManifold, NearZeroTest1) {
 }
 
 TEST(SphereManifold, NearZeroTest2) {
-  Vector4d x{0.001, 0.0, 0.0, 0.0};
+  Vector4d x{0.01, 0.0, 0.0, 0.0};
   Vector3d delta{0.0, 1.0, 0.0};
   Vector4d y = Vector4d::Zero();
   SphereManifold<4> manifold;
@@ -722,12 +712,49 @@ TEST(SphereManifold, NearZeroTest2) {
   EXPECT_THAT_MANIFOLD_INVARIANTS_HOLD(manifold, x, delta, y, kTolerance);
 }
 
-TEST(SphereManifold, Plus) {
+TEST(SphereManifold, Plus2DTest) {
+  Eigen::Vector2d x{0.0, 1.0};
+  SphereManifold<2> manifold;
+
+  {
+    double delta[1]{constants::pi / 4};
+    Eigen::Vector2d y = Eigen::Vector2d::Zero();
+    EXPECT_TRUE(manifold.Plus(x.data(), delta, y.data()));
+    const Eigen::Vector2d gtY(std::sqrt(2.0) / 2.0, std::sqrt(2.0) / 2.0);
+    EXPECT_LT((y - gtY).norm(), kTolerance);
+  }
+
+  {
+    double delta[1]{constants::pi / 2};
+    Eigen::Vector2d y = Eigen::Vector2d::Zero();
+    EXPECT_TRUE(manifold.Plus(x.data(), delta, y.data()));
+    const Eigen::Vector2d gtY = Eigen::Vector2d::UnitX();
+    EXPECT_LT((y - gtY).norm(), kTolerance);
+  }
+
+  {
+    double delta[1]{constants::pi};
+    Eigen::Vector2d y = Eigen::Vector2d::Zero();
+    EXPECT_TRUE(manifold.Plus(x.data(), delta, y.data()));
+    const Eigen::Vector2d gtY = -Eigen::Vector2d::UnitY();
+    EXPECT_LT((y - gtY).norm(), kTolerance);
+  }
+
+  {
+    double delta[1]{2.0 * constants::pi};
+    Eigen::Vector2d y = Eigen::Vector2d::Zero();
+    EXPECT_TRUE(manifold.Plus(x.data(), delta, y.data()));
+    const Eigen::Vector2d gtY = Eigen::Vector2d::UnitY();
+    EXPECT_LT((y - gtY).norm(), kTolerance);
+  }
+}
+
+TEST(SphereManifold, Plus3DTest) {
   Eigen::Vector3d x{0.0, 0.0, 1.0};
   SphereManifold<3> manifold;
 
   {
-    Eigen::Vector2d delta{M_PI, 0.0};
+    Eigen::Vector2d delta{constants::pi / 2, 0.0};
     Eigen::Vector3d y = Eigen::Vector3d::Zero();
     EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
     const Eigen::Vector3d gtY = Eigen::Vector3d::UnitX();
@@ -735,7 +762,23 @@ TEST(SphereManifold, Plus) {
   }
 
   {
-    Eigen::Vector2d delta{0.0, M_PI};
+    Eigen::Vector2d delta{constants::pi, 0.0};
+    Eigen::Vector3d y = Eigen::Vector3d::Zero();
+    EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
+    const Eigen::Vector3d gtY = -Eigen::Vector3d::UnitZ();
+    EXPECT_LT((y - gtY).norm(), kTolerance);
+  }
+
+  {
+    Eigen::Vector2d delta{2.0 * constants::pi, 0.0};
+    Eigen::Vector3d y = Eigen::Vector3d::Zero();
+    EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
+    const Eigen::Vector3d gtY = Eigen::Vector3d::UnitZ();
+    EXPECT_LT((y - gtY).norm(), kTolerance);
+  }
+
+  {
+    Eigen::Vector2d delta{0.0, constants::pi / 2};
     Eigen::Vector3d y = Eigen::Vector3d::Zero();
     EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
     const Eigen::Vector3d gtY = Eigen::Vector3d::UnitY();
@@ -743,11 +786,78 @@ TEST(SphereManifold, Plus) {
   }
 
   {
-    Eigen::Vector2d delta = Eigen::Vector2d(1, 1).normalized() * M_PI;
+    Eigen::Vector2d delta{0.0, constants::pi};
+    Eigen::Vector3d y = Eigen::Vector3d::Zero();
+    EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
+    const Eigen::Vector3d gtY = -Eigen::Vector3d::UnitZ();
+    EXPECT_LT((y - gtY).norm(), kTolerance);
+  }
+
+  {
+    Eigen::Vector2d delta{0.0, 2.0 * constants::pi};
+    Eigen::Vector3d y = Eigen::Vector3d::Zero();
+    EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
+    const Eigen::Vector3d gtY = Eigen::Vector3d::UnitZ();
+    EXPECT_LT((y - gtY).norm(), kTolerance);
+  }
+
+  {
+    Eigen::Vector2d delta =
+        Eigen::Vector2d(1, 1).normalized() * constants::pi / 2;
     Eigen::Vector3d y = Eigen::Vector3d::Zero();
     EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
     const Eigen::Vector3d gtY(std::sqrt(2.0) / 2.0, std::sqrt(2.0) / 2.0, 0.0);
     EXPECT_LT((y - gtY).norm(), kTolerance);
+  }
+
+  {
+    Eigen::Vector2d delta = Eigen::Vector2d(1, 1).normalized() * constants::pi;
+    Eigen::Vector3d y = Eigen::Vector3d::Zero();
+    EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
+    const Eigen::Vector3d gtY = -Eigen::Vector3d::UnitZ();
+    EXPECT_LT((y - gtY).norm(), kTolerance);
+  }
+}
+
+TEST(SphereManifold, Minus2DTest) {
+  Eigen::Vector2d x{1.0, 0.0};
+  SphereManifold<2> manifold;
+
+  {
+    double delta[1];
+    const Eigen::Vector2d y(std::sqrt(2.0) / 2.0, std::sqrt(2.0) / 2.0);
+    const double gtDelta{constants::pi / 4};
+    EXPECT_TRUE(manifold.Minus(y.data(), x.data(), delta));
+    EXPECT_LT(std::abs(delta[0] - gtDelta), kTolerance);
+  }
+
+  {
+    double delta[1];
+    const Eigen::Vector2d y(-1, 0);
+    const double gtDelta{constants::pi};
+    EXPECT_TRUE(manifold.Minus(y.data(), x.data(), delta));
+    EXPECT_LT(std::abs(delta[0] - gtDelta), kTolerance);
+  }
+}
+
+TEST(SphereManifold, Minus3DTest) {
+  Eigen::Vector3d x{1.0, 0.0, 0.0};
+  SphereManifold<3> manifold;
+
+  {
+    Eigen::Vector2d delta;
+    const Eigen::Vector3d y(std::sqrt(2.0) / 2.0, 0.0, std::sqrt(2.0) / 2.0);
+    const Eigen::Vector2d gtDelta(constants::pi / 4, 0.0);
+    EXPECT_TRUE(manifold.Minus(y.data(), x.data(), delta.data()));
+    EXPECT_LT((delta - gtDelta).norm(), kTolerance);
+  }
+
+  {
+    Eigen::Vector2d delta;
+    const Eigen::Vector3d y(-1, 0, 0);
+    const Eigen::Vector2d gtDelta(0.0, constants::pi);
+    EXPECT_TRUE(manifold.Minus(y.data(), x.data(), delta.data()));
+    EXPECT_LT((delta - gtDelta).norm(), kTolerance);
   }
 }
 
@@ -833,7 +943,7 @@ TEST(LineManifold, ZeroOriginPointTest3D) {
 TEST(LineManifold, ZeroOriginPointTest4D) {
   const Vector8d x = Vector8d::Unit(7);
   Vector6d delta;
-  delta << 0.0, 0.0, 0.0, 1.0, 2.0, 3.0;
+  delta << 0.0, 0.0, 0.0, 0.5, 1.0, 1.5;
   Vector8d y = Vector8d::Zero();
 
   LineManifold<4> manifold;
@@ -868,7 +978,7 @@ TEST(LineManifold, Plus) {
   LineManifold<3> manifold;
 
   {
-    Vector4d delta{0.0, 4.0, M_PI, 0.0};
+    Vector4d delta{0.0, 2.0, constants::pi / 2, 0.0};
     Vector6d y = Vector6d::Random();
     EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
     Vector6d gtY;
@@ -877,7 +987,7 @@ TEST(LineManifold, Plus) {
   }
 
   {
-    Vector4d delta{6.0, 0.0, 0.0, M_PI};
+    Vector4d delta{3.0, 0.0, 0.0, constants::pi / 2};
     Vector6d y = Vector6d::Zero();
     EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
     Vector6d gtY;
@@ -887,7 +997,8 @@ TEST(LineManifold, Plus) {
 
   {
     Vector4d delta;
-    delta << Vector2d(2.0, 4.0), Vector2d(1, 1).normalized() * M_PI;
+    delta << Vector2d(1.0, 2.0),
+        Vector2d(1, 1).normalized() * constants::pi / 2;
     Vector6d y = Vector6d::Zero();
     EXPECT_TRUE(manifold.Plus(x.data(), delta.data(), y.data()));
     Vector6d gtY;
@@ -941,5 +1052,4 @@ TEST(LineManifold, NormalFunctionTestDynamic) {
   }
 }
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

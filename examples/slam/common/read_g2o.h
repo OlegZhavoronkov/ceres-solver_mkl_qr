@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -38,8 +38,7 @@
 
 #include "glog/logging.h"
 
-namespace ceres {
-namespace examples {
+namespace ceres::examples {
 
 // Reads a single pose from the input and inserts it into the map. Returns false
 // if there is a duplicate entry.
@@ -60,7 +59,7 @@ bool ReadVertex(std::ifstream* infile,
   return true;
 }
 
-// Reads the contraints between two vertices in the pose graph
+// Reads the constraints between two vertices in the pose graph
 template <typename Constraint, typename Allocator>
 void ReadConstraint(std::ifstream* infile,
                     std::vector<Constraint, Allocator>* constraints) {
@@ -137,7 +136,6 @@ bool ReadG2oFile(const std::string& filename,
   return true;
 }
 
-}  // namespace examples
-}  // namespace ceres
+}  // namespace ceres::examples
 
 #endif  // EXAMPLES_CERES_READ_G2O_H_

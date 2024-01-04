@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2017 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -39,8 +39,7 @@
 #include "glog/logging.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 // Data generated with the following Python code.
 //   import numpy as np
@@ -367,9 +366,9 @@ class EuclideanDistanceFunctor {
 };
 
 TEST(DynamicSparsity, StaticAndDynamicSparsityProduceSameSolution) {
-  // Skip test if there is no sparse linear algebra library.
+  // Skip test if there is no sparse linear algebra library that
+  // supports dynamic sparsity.
   if (!IsSparseLinearAlgebraLibraryTypeAvailable(SUITE_SPARSE) &&
-      !IsSparseLinearAlgebraLibraryTypeAvailable(CX_SPARSE) &&
       !IsSparseLinearAlgebraLibraryTypeAvailable(EIGEN_SPARSE)) {
     return;
   }
@@ -384,7 +383,7 @@ TEST(DynamicSparsity, StaticAndDynamicSparsityProduceSameSolution) {
   //
   // Initialize `X` to points on the unit circle.
   Vector w(num_segments + 1);
-  w.setLinSpaced(num_segments + 1, 0.0, 2.0 * M_PI);
+  w.setLinSpaced(num_segments + 1, 0.0, 2.0 * constants::pi);
   w.conservativeResize(num_segments);
   Matrix X(num_segments, 2);
   X.col(0) = w.array().cos();
@@ -428,6 +427,13 @@ TEST(DynamicSparsity, StaticAndDynamicSparsityProduceSameSolution) {
   Solver::Options options;
   options.max_num_iterations = 100;
   options.linear_solver_type = SPARSE_NORMAL_CHOLESKY;
+  // Only SuiteSparse & EigenSparse currently support dynamic sparsity.
+  options.sparse_linear_algebra_library_type =
+#if !defined(CERES_NO_SUITESPARSE)
+      ceres::SUITE_SPARSE;
+#elif defined(CERES_USE_EIGEN_SPARSE)
+      ceres::EIGEN_SPARSE;
+#endif
 
   // First, solve `X` and `t` jointly with dynamic_sparsity = true.
   Matrix X0 = X;
@@ -454,5 +460,4 @@ TEST(DynamicSparsity, StaticAndDynamicSparsityProduceSameSolution) {
       << dynamic_summary.FullReport();
 }
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

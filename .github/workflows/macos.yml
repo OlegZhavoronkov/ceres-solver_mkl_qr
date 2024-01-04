@@ -17,6 +17,8 @@ jobs:
       matrix:
         os:
           - macos-11
+          - macos-12
+          - macos-13
         build_type:
           - Release
         lib:
@@ -27,12 +29,11 @@ jobs:
           - ios
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Setup Dependencies (iOS)
         if: matrix.target == 'ios'
         run: |
-          brew update
           brew install \
             ccache \
             eigen \
@@ -41,19 +42,19 @@ jobs:
       - name: Setup Dependencies (Host)
         if: matrix.target == 'host'
         run: |
-          brew update
           brew install \
             ccache \
             eigen \
             gflags \
             glog \
             google-benchmark \
+            metis \
             ninja \
             suite-sparse
 
       - name: Cache Build
         id: cache-build
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{env.CCACHE_DIR}}
           key: ${{matrix.os}}-ccache-${{matrix.build_type}}-${{matrix.lib}}-${{matrix.target}}-${{github.run_id}}

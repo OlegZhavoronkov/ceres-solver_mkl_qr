@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2022 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -43,8 +43,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 using Param = DenseLinearAlgebraLibraryType;
 
@@ -68,7 +67,11 @@ TEST_P(DenseQRTest, FactorAndSolve) {
 
   LinearSolver::Options options;
   ContextImpl context;
+#ifndef CERES_NO_CUDA
   options.context = &context;
+  std::string error;
+  CHECK(context.InitCuda(&error)) << error;
+#endif  // CERES_NO_CUDA
   options.dense_linear_algebra_library_type = GetParam();
   const double kEpsilon = std::numeric_limits<double>::epsilon() * 1.5e4;
   std::unique_ptr<DenseQR> dense_qr = DenseQR::Create(options);
@@ -94,7 +97,8 @@ TEST_P(DenseQRTest, FactorAndSolve) {
                                                             rhs.data(),
                                                             actual.data(),
                                                             &summary.message);
-        ASSERT_EQ(summary.termination_type, LINEAR_SOLVER_SUCCESS);
+        ASSERT_EQ(summary.termination_type,
+                  LinearSolverTerminationType::SUCCESS);
         ASSERT_NEAR((x - actual).norm() / x.norm(), 0.0, kEpsilon)
             << "\nexpected: " << x.transpose()
             << "\nactual  : " << actual.transpose();
@@ -123,5 +127,4 @@ decltype(auto) MakeValues() {
 
 INSTANTIATE_TEST_SUITE_P(_, DenseQRTest, MakeValues(), ParamInfoToString);
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

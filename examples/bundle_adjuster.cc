@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2015 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -55,7 +55,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "bal_problem.h"
@@ -80,21 +82,27 @@ DEFINE_string(blocks_for_inner_iterations, "automatic", "Options are: "
               "automatic, cameras, points, cameras,points, points,cameras");
 
 DEFINE_string(linear_solver, "sparse_schur", "Options are: "
-              "sparse_schur, dense_schur, iterative_schur, sparse_normal_cholesky, "
-              "dense_qr, dense_normal_cholesky and cgnr.");
+              "sparse_schur, dense_schur, iterative_schur, "
+              "sparse_normal_cholesky, dense_qr, dense_normal_cholesky, "
+              "and cgnr.");
 DEFINE_bool(explicit_schur_complement, false, "If using ITERATIVE_SCHUR "
             "then explicitly compute the Schur complement.");
 DEFINE_string(preconditioner, "jacobi", "Options are: "
-              "identity, jacobi, schur_jacobi, cluster_jacobi, "
+              "identity, jacobi, schur_jacobi, schur_power_series_expansion, cluster_jacobi, "
               "cluster_tridiagonal.");
 DEFINE_string(visibility_clustering, "canonical_views",
               "single_linkage, canonical_views");
+DEFINE_bool(use_spse_initialization, false,
+            "Use power series expansion to initialize the solution in ITERATIVE_SCHUR linear solver.");
 
 DEFINE_string(sparse_linear_algebra_library, "suite_sparse",
-              "Options are: suite_sparse and cx_sparse.");
+              "Options are: suite_sparse, accelerate_sparse, eigen_sparse, and "
+              "cuda_sparse.");
 DEFINE_string(dense_linear_algebra_library, "eigen",
               "Options are: eigen, lapack, and cuda");
-DEFINE_string(ordering, "automatic", "Options are: automatic, user.");
+DEFINE_string(ordering_type, "amd", "Options are: amd, nesdis");
+DEFINE_string(linear_solver_ordering, "user",
+              "Options are: automatic and user");
 
 DEFINE_bool(use_quaternions, false, "If true, uses quaternions to represent "
             "rotations. If false, angle axis is used.");
@@ -105,8 +113,14 @@ DEFINE_double(eta, 1e-2, "Default value for eta. Eta determines the "
               "accuracy of each linear solve of the truncated newton step. "
               "Changing this parameter can affect solve performance.");
 
-DEFINE_int32(num_threads, 1, "Number of threads.");
+DEFINE_int32(num_threads, -1, "Number of threads. -1 = std::thread::hardware_concurrency.");
 DEFINE_int32(num_iterations, 5, "Number of iterations.");
+DEFINE_int32(max_linear_solver_iterations, 500, "Maximum number of iterations"
+            " for solution of linear system.");
+DEFINE_double(spse_tolerance, 0.1,
+             "Tolerance to reach during the iterations of power series expansion initialization or preconditioning.");
+DEFINE_int32(max_num_spse_iterations, 5,
+             "Maximum number of iterations for power series expansion initialization or preconditioning.");
 DEFINE_double(max_solver_time, 1e32, "Maximum solve time in seconds.");
 DEFINE_bool(nonmonotonic_steps, false, "Trust region algorithm can use"
             " nonmonotic steps.");
@@ -119,7 +133,7 @@ DEFINE_double(point_sigma, 0.0, "Standard deviation of the point "
               "perturbation.");
 DEFINE_int32(random_seed, 38401, "Random seed used to set the state "
              "of the pseudo random number generator used to generate "
-             "the pertubations.");
+             "the perturbations.");
 DEFINE_bool(line_search, false, "Use a line search instead of trust region "
             "algorithm.");
 DEFINE_bool(mixed_precision_solves, false, "Use mixed precision solves.");
@@ -127,11 +141,9 @@ DEFINE_int32(max_num_refinement_iterations, 0, "Iterative refinement iterations"
 DEFINE_string(initial_ply, "", "Export the BAL file data as a PLY file.");
 DEFINE_string(final_ply, "", "Export the refined BAL file data as a PLY "
               "file.");
-
 // clang-format on
 
-namespace ceres {
-namespace examples {
+namespace ceres::examples {
 namespace {
 
 void SetLinearSolver(Solver::Options* options) {
@@ -148,12 +160,22 @@ void SetLinearSolver(Solver::Options* options) {
   CHECK(StringToDenseLinearAlgebraLibraryType(
       CERES_GET_FLAG(FLAGS_dense_linear_algebra_library),
       &options->dense_linear_algebra_library_type));
+  CHECK(
+      StringToLinearSolverOrderingType(CERES_GET_FLAG(FLAGS_ordering_type),
+                                       &options->linear_solver_ordering_type));
   options->use_explicit_schur_complement =
       CERES_GET_FLAG(FLAGS_explicit_schur_complement);
   options->use_mixed_precision_solves =
       CERES_GET_FLAG(FLAGS_mixed_precision_solves);
   options->max_num_refinement_iterations =
       CERES_GET_FLAG(FLAGS_max_num_refinement_iterations);
+  options->max_linear_solver_iterations =
+      CERES_GET_FLAG(FLAGS_max_linear_solver_iterations);
+  options->use_spse_initialization =
+      CERES_GET_FLAG(FLAGS_use_spse_initialization);
+  options->spse_tolerance = CERES_GET_FLAG(FLAGS_spse_tolerance);
+  options->max_num_spse_iterations =
+      CERES_GET_FLAG(FLAGS_max_num_spse_iterations);
 }
 
 void SetOrdering(BALProblem* bal_problem, Solver::Options* options) {
@@ -168,14 +190,16 @@ void SetOrdering(BALProblem* bal_problem, Solver::Options* options) {
   if (options->use_inner_iterations) {
     if (CERES_GET_FLAG(FLAGS_blocks_for_inner_iterations) == "cameras") {
       LOG(INFO) << "Camera blocks for inner iterations";
-      options->inner_iteration_ordering.reset(new ParameterBlockOrdering);
+      options->inner_iteration_ordering =
+          std::make_shared<ParameterBlockOrdering>();
       for (int i = 0; i < num_cameras; ++i) {
         options->inner_iteration_ordering->AddElementToGroup(
             cameras + camera_block_size * i, 0);
       }
     } else if (CERES_GET_FLAG(FLAGS_blocks_for_inner_iterations) == "points") {
       LOG(INFO) << "Point blocks for inner iterations";
-      options->inner_iteration_ordering.reset(new ParameterBlockOrdering);
+      options->inner_iteration_ordering =
+          std::make_shared<ParameterBlockOrdering>();
       for (int i = 0; i < num_points; ++i) {
         options->inner_iteration_ordering->AddElementToGroup(
             points + point_block_size * i, 0);
@@ -183,7 +207,8 @@ void SetOrdering(BALProblem* bal_problem, Solver::Options* options) {
     } else if (CERES_GET_FLAG(FLAGS_blocks_for_inner_iterations) ==
                "cameras,points") {
       LOG(INFO) << "Camera followed by point blocks for inner iterations";
-      options->inner_iteration_ordering.reset(new ParameterBlockOrdering);
+      options->inner_iteration_ordering =
+          std::make_shared<ParameterBlockOrdering>();
       for (int i = 0; i < num_cameras; ++i) {
         options->inner_iteration_ordering->AddElementToGroup(
             cameras + camera_block_size * i, 0);
@@ -195,7 +220,8 @@ void SetOrdering(BALProblem* bal_problem, Solver::Options* options) {
     } else if (CERES_GET_FLAG(FLAGS_blocks_for_inner_iterations) ==
                "points,cameras") {
       LOG(INFO) << "Point followed by camera blocks for inner iterations";
-      options->inner_iteration_ordering.reset(new ParameterBlockOrdering);
+      options->inner_iteration_ordering =
+          std::make_shared<ParameterBlockOrdering>();
       for (int i = 0; i < num_cameras; ++i) {
         options->inner_iteration_ordering->AddElementToGroup(
             cameras + camera_block_size * i, 1);
@@ -219,35 +245,41 @@ void SetOrdering(BALProblem* bal_problem, Solver::Options* options) {
   // ITERATIVE_SCHUR solvers make use of this specialized
   // structure.
   //
-  // This can either be done by specifying Options::ordering_type =
-  // ceres::SCHUR, in which case Ceres will automatically determine
-  // the right ParameterBlock ordering, or by manually specifying a
-  // suitable ordering vector and defining
-  // Options::num_eliminate_blocks.
-  if (CERES_GET_FLAG(FLAGS_ordering) == "automatic") {
-    return;
+  // This can either be done by specifying a
+  // Options::linear_solver_ordering or having Ceres figure it out
+  // automatically using a greedy maximum independent set algorithm.
+  if (CERES_GET_FLAG(FLAGS_linear_solver_ordering) == "user") {
+    auto* ordering = new ceres::ParameterBlockOrdering;
+
+    // The points come before the cameras.
+    for (int i = 0; i < num_points; ++i) {
+      ordering->AddElementToGroup(points + point_block_size * i, 0);
+    }
+
+    for (int i = 0; i < num_cameras; ++i) {
+      // When using axis-angle, there is a single parameter block for
+      // the entire camera.
+      ordering->AddElementToGroup(cameras + camera_block_size * i, 1);
+    }
+
+    options->linear_solver_ordering.reset(ordering);
   }
-
-  auto* ordering = new ceres::ParameterBlockOrdering;
-
-  // The points come before the cameras.
-  for (int i = 0; i < num_points; ++i) {
-    ordering->AddElementToGroup(points + point_block_size * i, 0);
-  }
-
-  for (int i = 0; i < num_cameras; ++i) {
-    // When using axis-angle, there is a single parameter block for
-    // the entire camera.
-    ordering->AddElementToGroup(cameras + camera_block_size * i, 1);
-  }
-
-  options->linear_solver_ordering.reset(ordering);
 }
 
 void SetMinimizerOptions(Solver::Options* options) {
   options->max_num_iterations = CERES_GET_FLAG(FLAGS_num_iterations);
   options->minimizer_progress_to_stdout = true;
-  options->num_threads = CERES_GET_FLAG(FLAGS_num_threads);
+  if (CERES_GET_FLAG(FLAGS_num_threads) == -1) {
+    const int num_available_threads =
+        static_cast<int>(std::thread::hardware_concurrency());
+    if (num_available_threads > 0) {
+      options->num_threads = num_available_threads;
+    }
+  } else {
+    options->num_threads = CERES_GET_FLAG(FLAGS_num_threads);
+  }
+  CHECK_GE(options->num_threads, 1);
+
   options->eta = CERES_GET_FLAG(FLAGS_eta);
   options->max_solver_time_in_seconds = CERES_GET_FLAG(FLAGS_max_solver_time);
   options->use_nonmonotonic_steps = CERES_GET_FLAG(FLAGS_nonmonotonic_steps);
@@ -294,7 +326,7 @@ void BuildProblem(BALProblem* bal_problem, Problem* problem) {
     LossFunction* loss_function =
         CERES_GET_FLAG(FLAGS_robustify) ? new HuberLoss(1.0) : nullptr;
 
-    // Each observation correponds to a pair of a camera and a point
+    // Each observation corresponds to a pair of a camera and a point
     // which are identified by camera_index()[i] and point_index()[i]
     // respectively.
     double* camera =
@@ -333,6 +365,7 @@ void SolveProblem(const char* filename) {
   SetSolverOptionsFromFlags(&bal_problem, &options);
   options.gradient_tolerance = 1e-16;
   options.function_tolerance = 1e-16;
+  options.parameter_tolerance = 1e-16;
   Solver::Summary summary;
   Solve(options, &problem, &summary);
   std::cout << summary.FullReport() << "\n";
@@ -343,8 +376,7 @@ void SolveProblem(const char* filename) {
 }
 
 }  // namespace
-}  // namespace examples
-}  // namespace ceres
+}  // namespace ceres::examples
 
 int main(int argc, char** argv) {
   GFLAGS_NAMESPACE::ParseCommandLineFlags(&argc, &argv, true);

@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2015 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -203,11 +203,11 @@ bool Homography2DFromCorrespondencesLinearEuc(const Mat& x1,
   assert(x1.rows() == x2.rows());
   assert(x1.cols() == x2.cols());
 
-  int n = x1.cols();
+  const int64_t n = x1.cols();
   MatX8 L = Mat::Zero(n * 3, 8);
   Mat b = Mat::Zero(n * 3, 1);
-  for (int i = 0; i < n; ++i) {
-    int j = 3 * i;
+  for (int64_t i = 0; i < n; ++i) {
+    int64_t j = 3 * i;
     L(j, 0) = x1(0, i);              // a
     L(j, 1) = x1(1, i);              // b
     L(j, 2) = 1.0;                   // c
@@ -380,10 +380,10 @@ int main(int argc, char** argv) {
 
   Mat x2 = x1;
   for (int i = 0; i < x2.cols(); ++i) {
-    Vec3 homogenous_x1 = Vec3(x1(0, i), x1(1, i), 1.0);
-    Vec3 homogenous_x2 = homography_matrix * homogenous_x1;
-    x2(0, i) = homogenous_x2(0) / homogenous_x2(2);
-    x2(1, i) = homogenous_x2(1) / homogenous_x2(2);
+    Vec3 homogeneous_x1 = Vec3(x1(0, i), x1(1, i), 1.0);
+    Vec3 homogeneous_x2 = homography_matrix * homogeneous_x1;
+    x2(0, i) = homogeneous_x2(0) / homogeneous_x2(2);
+    x2(1, i) = homogeneous_x2(1) / homogeneous_x2(2);
 
     // Apply some noise so algebraic estimation is not good enough.
     x2(0, i) += static_cast<double>(rand() % 1000) / 5000.0;

@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2022 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -159,7 +159,7 @@ TEST(LevenbergMarquardtStrategy, CorrectDiagonalToLinearSolver) {
 
     TrustRegionStrategy::Summary summary =
         lms.ComputeStep(pso, &dsm, &residual, x);
-    EXPECT_EQ(summary.termination_type, LINEAR_SOLVER_FAILURE);
+    EXPECT_EQ(summary.termination_type, LinearSolverTerminationType::FAILURE);
   }
 }
 

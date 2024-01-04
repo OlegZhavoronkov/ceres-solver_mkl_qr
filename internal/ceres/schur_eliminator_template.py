@@ -1,5 +1,5 @@
 # Ceres Solver - A fast non-linear least squares minimizer
-# Copyright 2017 Google Inc. All rights reserved.
+# Copyright 2023 Google Inc. All rights reserved.
 # http://ceres-solver.org/
 #
 # Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@
 # Set of template specializations to generate
 
 HEADER = """// Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2017 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -95,13 +95,11 @@ HEADER = """// Ceres Solver - A fast non-linear least squares minimizer
 DYNAMIC_FILE = """
 #include "ceres/schur_eliminator_impl.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 template class SchurEliminator<%s, %s, %s>;
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal
 """
 
 SPECIALIZATION_FILE = """
@@ -112,13 +110,11 @@ SPECIALIZATION_FILE = """
 
 #include "ceres/schur_eliminator_impl.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 template class SchurEliminator<%s, %s, %s>;
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal
 
 #endif  // CERES_RESTRICT_SCHUR_SPECIALIZATION
 """
@@ -129,8 +125,7 @@ FACTORY_FILE_HEADER = """
 #include "ceres/linear_solver.h"
 #include "ceres/schur_eliminator.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 SchurEliminatorBase::~SchurEliminatorBase() = default;
 
@@ -151,6 +146,5 @@ FACTORY_FOOTER = """
                                           Eigen::Dynamic>>(options);
 }
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal
 """

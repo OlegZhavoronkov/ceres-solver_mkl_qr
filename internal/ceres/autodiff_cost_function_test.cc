@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2019 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -36,8 +36,7 @@
 #include "ceres/cost_function.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 class BinaryScalarCost {
  public:
@@ -179,5 +178,4 @@ TEST(AutoDiffCostFunction, PartiallyFilledResidualShouldFailEvaluation) {
   EXPECT_FALSE(IsArrayValid(2, residuals));
 }
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

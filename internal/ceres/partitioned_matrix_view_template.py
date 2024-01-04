@@ -1,5 +1,5 @@
 # Ceres Solver - A fast non-linear least squares minimizer
-# Copyright 2015 Google Inc. All rights reserved.
+# Copyright 2023 Google Inc. All rights reserved.
 # http://ceres-solver.org/
 #
 # Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@
 # specializations that is generated.
 
 HEADER = """// Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2017 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -91,15 +91,13 @@ HEADER = """// Ceres Solver - A fast non-linear least squares minimizer
 DYNAMIC_FILE = """
 #include "ceres/partitioned_matrix_view_impl.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 template class PartitionedMatrixView<%s,
                                      %s,
                                      %s>;
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal
 """
 
 SPECIALIZATION_FILE = """
@@ -110,13 +108,11 @@ SPECIALIZATION_FILE = """
 
 #include "ceres/partitioned_matrix_view_impl.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 template class PartitionedMatrixView<%s, %s, %s>;
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal
 
 #endif  // CERES_RESTRICT_SCHUR_SPECIALIZATION
 """
@@ -127,8 +123,7 @@ FACTORY_FILE_HEADER = """
 #include "ceres/linear_solver.h"
 #include "ceres/partitioned_matrix_view.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 PartitionedMatrixViewBase::~PartitionedMatrixViewBase() = default;
 
@@ -137,7 +132,7 @@ std::unique_ptr<PartitionedMatrixViewBase> PartitionedMatrixViewBase::Create(
 #ifndef CERES_RESTRICT_SCHUR_SPECIALIZATION
 """
 FACTORY = """  return std::make_unique<PartitionedMatrixView<%s,%s, %s>>(
-                   matrix, options.elimination_groups[0]);"""
+                   options, matrix);"""
 
 FACTORY_FOOTER = """
 #endif
@@ -147,9 +142,8 @@ FACTORY_FOOTER = """
   return std::make_unique<PartitionedMatrixView<Eigen::Dynamic,
                                                 Eigen::Dynamic,
                                                 Eigen::Dynamic>>(
-      matrix, options.elimination_groups[0]);
+      options, matrix);
 };
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal
 """

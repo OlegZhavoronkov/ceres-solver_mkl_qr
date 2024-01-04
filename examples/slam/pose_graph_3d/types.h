@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2016 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -40,8 +40,7 @@
 #include "Eigen/Core"
 #include "Eigen/Geometry"
 
-namespace ceres {
-namespace examples {
+namespace ceres::examples {
 
 struct Pose3d {
   Eigen::Vector3d p;
@@ -107,7 +106,6 @@ inline std::istream& operator>>(std::istream& input, Constraint3d& constraint) {
 using VectorOfConstraints =
     std::vector<Constraint3d, Eigen::aligned_allocator<Constraint3d>>;
 
-}  // namespace examples
-}  // namespace ceres
+}  // namespace ceres::examples
 
 #endif  // EXAMPLES_CERES_TYPES_H_

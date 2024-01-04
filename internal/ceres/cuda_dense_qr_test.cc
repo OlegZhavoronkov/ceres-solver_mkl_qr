@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2022 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,17 +32,19 @@
 
 #include "ceres/dense_qr.h"
 #include "ceres/internal/eigen.h"
-
 #include "glog/logging.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 #ifndef CERES_NO_CUDA
 
 TEST(CUDADenseQR, InvalidOptionOnCreate) {
   LinearSolver::Options options;
+  ContextImpl context;
+  options.context = &context;
+  std::string error;
+  EXPECT_TRUE(context.InitCuda(&error)) << error;
   auto dense_cuda_solver = CUDADenseQR::Create(options);
   EXPECT_EQ(dense_cuda_solver, nullptr);
 }
@@ -50,62 +52,66 @@ TEST(CUDADenseQR, InvalidOptionOnCreate) {
 // Tests the CUDA QR solver with a simple 4x4 matrix.
 TEST(CUDADenseQR, QR4x4Matrix) {
   Eigen::Matrix4d A;
+  // clang-format off
   A <<  4,  12, -16, 0,
        12,  37, -43, 0,
       -16, -43,  98, 0,
         0,   0,   0, 1;
+  // clang-format on
   const Eigen::Vector4d b = Eigen::Vector4d::Ones();
   LinearSolver::Options options;
   ContextImpl context;
   options.context = &context;
+  std::string error;
+  EXPECT_TRUE(context.InitCuda(&error)) << error;
   options.dense_linear_algebra_library_type = CUDA;
   auto dense_cuda_solver = CUDADenseQR::Create(options);
   ASSERT_NE(dense_cuda_solver, nullptr);
   std::string error_string;
-  ASSERT_EQ(dense_cuda_solver->Factorize(A.rows(),
-                                         A.cols(),
-                                         A.data(),
-                                         &error_string),
-            LinearSolverTerminationType::LINEAR_SOLVER_SUCCESS);
+  ASSERT_EQ(
+      dense_cuda_solver->Factorize(A.rows(), A.cols(), A.data(), &error_string),
+      LinearSolverTerminationType::SUCCESS);
   Eigen::Vector4d x = Eigen::Vector4d::Zero();
   ASSERT_EQ(dense_cuda_solver->Solve(b.data(), x.data(), &error_string),
-            LinearSolverTerminationType::LINEAR_SOLVER_SUCCESS);
+            LinearSolverTerminationType::SUCCESS);
   // Empirically observed accuracy of cuSolverDN's QR solver.
-  const double kEpsilon = 1e-11;
-  EXPECT_NEAR(x(0), 113.75 / 3.0, kEpsilon);
-  EXPECT_NEAR(x(1), -31.0 / 3.0, kEpsilon);
-  EXPECT_NEAR(x(2), 5.0 / 3.0, kEpsilon);
-  EXPECT_NEAR(x(3), 1.0000, kEpsilon);
+  const double kEpsilon = std::numeric_limits<double>::epsilon() * 1500;
+  const Eigen::Vector4d x_expected(113.75 / 3.0, -31.0 / 3.0, 5.0 / 3.0, 1.0);
+  EXPECT_NEAR((x - x_expected).norm() / x_expected.norm(), 0.0, kEpsilon);
 }
 
 // Tests the CUDA QR solver with a simple 4x4 matrix.
 TEST(CUDADenseQR, QR4x2Matrix) {
   Eigen::Matrix<double, 4, 2> A;
+  // clang-format off
   A <<  4,  12,
        12,  37,
       -16, -43,
         0,   0;
+  // clang-format on
+
   const std::vector<double> b(4, 1.0);
   LinearSolver::Options options;
   ContextImpl context;
   options.context = &context;
+  std::string error;
+  EXPECT_TRUE(context.InitCuda(&error)) << error;
   options.dense_linear_algebra_library_type = CUDA;
   auto dense_cuda_solver = CUDADenseQR::Create(options);
   ASSERT_NE(dense_cuda_solver, nullptr);
   std::string error_string;
-  ASSERT_EQ(dense_cuda_solver->Factorize(A.rows(),
-                                         A.cols(),
-                                         A.data(),
-                                         &error_string),
-            LinearSolverTerminationType::LINEAR_SOLVER_SUCCESS);
+  ASSERT_EQ(
+      dense_cuda_solver->Factorize(A.rows(), A.cols(), A.data(), &error_string),
+      LinearSolverTerminationType::SUCCESS);
   std::vector<double> x(2, 0);
   ASSERT_EQ(dense_cuda_solver->Solve(b.data(), x.data(), &error_string),
-            LinearSolverTerminationType::LINEAR_SOLVER_SUCCESS);
+            LinearSolverTerminationType::SUCCESS);
   // Empirically observed accuracy of cuSolverDN's QR solver.
-  const double kEpsilon = 1e-11;
+  const double kEpsilon = std::numeric_limits<double>::epsilon() * 10;
   // Solution values computed with Octave.
-  EXPECT_NEAR(x[0], -1.143410852713177, kEpsilon);
-  EXPECT_NEAR(x[1], 0.4031007751937981, kEpsilon);
+  const Eigen::Vector2d x_expected(-1.143410852713177, 0.4031007751937981);
+  EXPECT_NEAR((x[0] - x_expected[0]) / x_expected[0], 0.0, kEpsilon);
+  EXPECT_NEAR((x[1] - x_expected[1]) / x_expected[1], 0.0, kEpsilon);
 }
 
 TEST(CUDADenseQR, MustFactorizeBeforeSolve) {
@@ -113,12 +119,14 @@ TEST(CUDADenseQR, MustFactorizeBeforeSolve) {
   LinearSolver::Options options;
   ContextImpl context;
   options.context = &context;
+  std::string error;
+  EXPECT_TRUE(context.InitCuda(&error)) << error;
   options.dense_linear_algebra_library_type = CUDA;
   auto dense_cuda_solver = CUDADenseQR::Create(options);
   ASSERT_NE(dense_cuda_solver, nullptr);
   std::string error_string;
   ASSERT_EQ(dense_cuda_solver->Solve(b.data(), nullptr, &error_string),
-            LinearSolverTerminationType::LINEAR_SOLVER_FATAL_ERROR);
+            LinearSolverTerminationType::FATAL_ERROR);
 }
 
 TEST(CUDADenseQR, Randomized1600x100Tests) {
@@ -131,10 +139,12 @@ TEST(CUDADenseQR, Randomized1600x100Tests) {
   LinearSolver::Options options;
   ContextImpl context;
   options.context = &context;
+  std::string error;
+  EXPECT_TRUE(context.InitCuda(&error)) << error;
   options.dense_linear_algebra_library_type = ceres::CUDA;
   std::unique_ptr<DenseQR> dense_qr = CUDADenseQR::Create(options);
 
-  const int kNumTrials = 100;
+  const int kNumTrials = 20;
   for (int i = 0; i < kNumTrials; ++i) {
     LhsType lhs = LhsType::Random(kNumRows, kNumCols);
     SolutionType x_expected = SolutionType::Random(kNumCols);
@@ -156,7 +166,7 @@ TEST(CUDADenseQR, Randomized1600x100Tests) {
                                                         rhs.data(),
                                                         x_computed.data(),
                                                         &summary.message);
-    ASSERT_EQ(summary.termination_type, LINEAR_SOLVER_SUCCESS);
+    ASSERT_EQ(summary.termination_type, LinearSolverTerminationType::SUCCESS);
     ASSERT_NEAR((x_computed - x_expected).norm() / x_expected.norm(),
                 0.0,
                 std::numeric_limits<double>::epsilon() * 400);
@@ -164,5 +174,4 @@ TEST(CUDADenseQR, Randomized1600x100Tests) {
 }
 #endif  // CERES_NO_CUDA
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

@@ -1,5 +1,5 @@
 # Ceres Solver - A fast non-linear least squares minimizer
-# Copyright 2022 Google Inc. All rights reserved.
+# Copyright 2023 Google Inc. All rights reserved.
 # http://ceres-solver.org/
 #
 # Redistribution and use in source and binary forms, with or without
@@ -78,6 +78,9 @@ The following targets define the SuiteSparse components searched for.
 ``SuiteSparse::CHOLMOD``
     Sparse Supernodal Cholesky Factorization and Update/Downdate (CHOLMOD)
 
+``SuiteSparse::Partition``
+    CHOLMOD with METIS support
+
 ``SuiteSparse::SPQR``
     Multifrontal Sparse QR (SuiteSparseQR)
 
@@ -126,6 +129,8 @@ endif (NOT SuiteSparse_FIND_COMPONENTS)
 set (SuiteSparse_FOUND TRUE)
 
 include (CheckLibraryExists)
+include (CheckSymbolExists)
+include (CMakePushCheckState)
 
 # Config is a base component and thus always required
 set (SuiteSparse_IMPLICIT_COMPONENTS Config)
@@ -346,6 +351,11 @@ if (NOT LAPACK_FOUND)
 endif (NOT LAPACK_FOUND)
 
 foreach (component IN LISTS SuiteSparse_FIND_COMPONENTS)
+  if (component STREQUAL Partition)
+    # Partition is a meta component that neither provides additional headers nor
+    # a separate library. It is strictly part of CHOLMOD.
+    continue ()
+  endif (component STREQUAL Partition)
   string (TOLOWER ${component} component_library)
 
   if (component STREQUAL "Config")
@@ -441,40 +451,41 @@ if (TARGET SuiteSparse::Config)
   else (NOT EXISTS ${SuiteSparse_VERSION_FILE})
     file(READ ${SuiteSparse_VERSION_FILE} Config_CONTENTS)
 
-    string(REGEX MATCH "#define SUITESPARSE_MAIN_VERSION[ ]+[0-9]+"
-      SuiteSparse_VERSION_MAJOR "${Config_CONTENTS}")
-    string(REGEX REPLACE "#define SUITESPARSE_MAIN_VERSION[ ]+([0-9]+)" "\\1"
-      SuiteSparse_VERSION_MAJOR "${SuiteSparse_VERSION_MAJOR}")
+    string(REGEX MATCH "#define SUITESPARSE_MAIN_VERSION[ \t]+([0-9]+)"
+      SuiteSparse_VERSION_LINE "${Config_CONTENTS}")
+    set (SuiteSparse_VERSION_MAJOR ${CMAKE_MATCH_1})
 
-    string(REGEX MATCH "#define SUITESPARSE_SUB_VERSION[ ]+[0-9]+"
-      SuiteSparse_VERSION_MINOR "${Config_CONTENTS}")
-    string(REGEX REPLACE "#define SUITESPARSE_SUB_VERSION[ ]+([0-9]+)" "\\1"
-      SuiteSparse_VERSION_MINOR "${SuiteSparse_VERSION_MINOR}")
+    string(REGEX MATCH "#define SUITESPARSE_SUB_VERSION[ \t]+([0-9]+)"
+      SuiteSparse_VERSION_LINE "${Config_CONTENTS}")
+    set (SuiteSparse_VERSION_MINOR ${CMAKE_MATCH_1})
 
-    string(REGEX MATCH "#define SUITESPARSE_SUBSUB_VERSION[ ]+[0-9]+"
-      SuiteSparse_VERSION_PATCH "${Config_CONTENTS}")
-    string(REGEX REPLACE "#define SUITESPARSE_SUBSUB_VERSION[ ]+([0-9]+)" "\\1"
-      SuiteSparse_VERSION_PATCH "${SuiteSparse_VERSION_PATCH}")
+    string(REGEX MATCH "#define SUITESPARSE_SUBSUB_VERSION[ \t]+([0-9]+)"
+      SuiteSparse_VERSION_LINE "${Config_CONTENTS}")
+    set (SuiteSparse_VERSION_PATCH ${CMAKE_MATCH_1})
+
+    unset (SuiteSparse_VERSION_LINE)
 
     # This is on a single line s/t CMake does not interpret it as a list of
     # elements and insert ';' separators which would result in 4.;2.;1 nonsense.
     set(SuiteSparse_VERSION
       "${SuiteSparse_VERSION_MAJOR}.${SuiteSparse_VERSION_MINOR}.${SuiteSparse_VERSION_PATCH}")
-    set(SuiteSparse_VERSION_COMPONENTS 3)
+
+    if (SuiteSparse_VERSION MATCHES "[0-9]+\\.[0-9]+\\.[0-9]+")
+      set(SuiteSparse_VERSION_COMPONENTS 3)
+    else (SuiteSparse_VERSION MATCHES "[0-9]+\\.[0-9]+\\.[0-9]+")
+      message (WARNING "Could not parse SuiteSparse_config.h: SuiteSparse "
+        "version will not be available")
+
+      unset (SuiteSparse_VERSION)
+      unset (SuiteSparse_VERSION_MAJOR)
+      unset (SuiteSparse_VERSION_MINOR)
+      unset (SuiteSparse_VERSION_PATCH)
+    endif (SuiteSparse_VERSION MATCHES "[0-9]+\\.[0-9]+\\.[0-9]+")
   endif (NOT EXISTS ${SuiteSparse_VERSION_FILE})
 endif (TARGET SuiteSparse::Config)
 
-# METIS (Optional dependency).
-find_package (METIS)
-
 # CHOLMOD requires AMD CAMD CCOLAMD COLAMD
 if (TARGET SuiteSparse::CHOLMOD)
-  # METIS is optional
-  if (TARGET METIS::METIS)
-    set_property (TARGET SuiteSparse::CHOLMOD APPEND PROPERTY
-      INTERFACE_LINK_LIBRARIES METIS::METIS)
-  endif (TARGET METIS::METIS)
-
   foreach (component IN ITEMS AMD CAMD CCOLAMD COLAMD)
     if (TARGET SuiteSparse::${component})
       set_property (TARGET SuiteSparse::CHOLMOD APPEND PROPERTY
@@ -510,6 +521,44 @@ if (TARGET SuiteSparse::Config)
     endif (TARGET SuiteSparse::${component})
   endforeach (component IN LISTS SuiteSparse_FIND_COMPONENTS)
 endif (TARGET SuiteSparse::Config)
+
+# Check whether CHOLMOD was compiled with METIS support. The check can be
+# performed only after the main components have been set up.
+if (TARGET SuiteSparse::CHOLMOD)
+  # NOTE If SuiteSparse was compiled as a static library we'll need to link
+  # against METIS already during the check. Otherwise, the check can fail due to
+  # undefined references even though SuiteSparse was compiled with METIS.
+  find_package (METIS)
+
+  if (TARGET METIS::METIS)
+    cmake_push_check_state (RESET)
+    set (CMAKE_REQUIRED_LIBRARIES SuiteSparse::CHOLMOD METIS::METIS)
+    check_symbol_exists (cholmod_metis cholmod.h SuiteSparse_CHOLMOD_USES_METIS)
+    cmake_pop_check_state ()
+
+    if (SuiteSparse_CHOLMOD_USES_METIS)
+      set_property (TARGET SuiteSparse::CHOLMOD APPEND PROPERTY
+        INTERFACE_LINK_LIBRARIES $<LINK_ONLY:METIS::METIS>)
+
+      # Provide the SuiteSparse::Partition component whose availability indicates
+      # that CHOLMOD was compiled with the Partition module.
+      if (NOT TARGET SuiteSparse::Partition)
+        add_library (SuiteSparse::Partition IMPORTED INTERFACE)
+      endif (NOT TARGET SuiteSparse::Partition)
+
+      set_property (TARGET SuiteSparse::Partition APPEND PROPERTY
+        INTERFACE_LINK_LIBRARIES SuiteSparse::CHOLMOD)
+    endif (SuiteSparse_CHOLMOD_USES_METIS)
+  endif (TARGET METIS::METIS)
+endif (TARGET SuiteSparse::CHOLMOD)
+
+# We do not use suitesparse_find_component to find Partition and therefore must
+# handle the availability in an extra step.
+if (TARGET SuiteSparse::Partition)
+  set (SuiteSparse_Partition_FOUND TRUE)
+else (TARGET SuiteSparse::Partition)
+  set (SuiteSparse_Partition_FOUND FALSE)
+endif (TARGET SuiteSparse::Partition)
 
 suitesparse_reset_find_library_prefix()
 

@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2015 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,6 +31,8 @@
 #include "ceres/residual_block.h"
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 #include "ceres/internal/eigen.h"
 #include "ceres/manifold.h"
@@ -38,10 +40,7 @@
 #include "ceres/sized_cost_function.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
-
-using std::vector;
+namespace ceres::internal {
 
 // Trivial cost function that accepts three arguments.
 class TernaryCostFunction : public CostFunction {
@@ -75,7 +74,7 @@ class TernaryCostFunction : public CostFunction {
   }
 };
 
-TEST(ResidualBlock, EvaluteWithNoLossFunctionOrManifolds) {
+TEST(ResidualBlock, EvaluateWithNoLossFunctionOrManifolds) {
   double scratch[64];
 
   // Prepare the parameter blocks.
@@ -88,7 +87,7 @@ TEST(ResidualBlock, EvaluteWithNoLossFunctionOrManifolds) {
   double values_z[4];
   ParameterBlock z(values_z, 4, -1);
 
-  vector<ParameterBlock*> parameters;
+  std::vector<ParameterBlock*> parameters;
   parameters.push_back(&x);
   parameters.push_back(&y);
   parameters.push_back(&z);
@@ -200,7 +199,7 @@ class LocallyParameterizedCostFunction : public SizedCostFunction<3, 2, 3, 4> {
   }
 };
 
-TEST(ResidualBlock, EvaluteWithManifolds) {
+TEST(ResidualBlock, EvaluateWithManifolds) {
   double scratch[64];
 
   // Prepare the parameter blocks.
@@ -213,19 +212,19 @@ TEST(ResidualBlock, EvaluteWithManifolds) {
   double values_z[4];
   ParameterBlock z(values_z, 4, -1);
 
-  vector<ParameterBlock*> parameters;
+  std::vector<ParameterBlock*> parameters;
   parameters.push_back(&x);
   parameters.push_back(&y);
   parameters.push_back(&z);
 
   // Make x have the first component fixed.
-  vector<int> x_fixed;
+  std::vector<int> x_fixed;
   x_fixed.push_back(0);
   SubsetManifold x_manifold(2, x_fixed);
   x.SetManifold(&x_manifold);
 
   // Make z have the last and last component fixed.
-  vector<int> z_fixed;
+  std::vector<int> z_fixed;
   z_fixed.push_back(2);
   SubsetManifold z_manifold(4, z_fixed);
   z.SetManifold(&z_manifold);
@@ -324,5 +323,4 @@ TEST(ResidualBlock, EvaluteWithManifolds) {
   EXPECT_EQ(expected_jacobian_rz, jacobian_rz);
 }
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

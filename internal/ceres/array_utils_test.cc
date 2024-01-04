@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2015 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -36,10 +36,7 @@
 
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
-
-using std::vector;
+namespace ceres::internal {
 
 TEST(ArrayUtils, IsArrayValid) {
   double x[3];
@@ -76,10 +73,10 @@ TEST(ArrayUtils, FindInvalidIndex) {
 }
 
 TEST(MapValuesToContiguousRange, ContiguousEntries) {
-  vector<int> array;
+  std::vector<int> array;
   array.push_back(0);
   array.push_back(1);
-  vector<int> expected = array;
+  std::vector<int> expected = array;
   MapValuesToContiguousRange(array.size(), &array[0]);
   EXPECT_EQ(array, expected);
   array.clear();
@@ -92,10 +89,10 @@ TEST(MapValuesToContiguousRange, ContiguousEntries) {
 }
 
 TEST(MapValuesToContiguousRange, NonContiguousEntries) {
-  vector<int> array;
+  std::vector<int> array;
   array.push_back(0);
   array.push_back(2);
-  vector<int> expected;
+  std::vector<int> expected;
   expected.push_back(0);
   expected.push_back(1);
   MapValuesToContiguousRange(array.size(), &array[0]);
@@ -103,14 +100,14 @@ TEST(MapValuesToContiguousRange, NonContiguousEntries) {
 }
 
 TEST(MapValuesToContiguousRange, NonContiguousRepeatingEntries) {
-  vector<int> array;
+  std::vector<int> array;
   array.push_back(3);
   array.push_back(1);
   array.push_back(0);
   array.push_back(0);
   array.push_back(0);
   array.push_back(5);
-  vector<int> expected;
+  std::vector<int> expected;
   expected.push_back(2);
   expected.push_back(1);
   expected.push_back(0);
@@ -121,5 +118,4 @@ TEST(MapValuesToContiguousRange, NonContiguousRepeatingEntries) {
   EXPECT_EQ(array, expected);
 }
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

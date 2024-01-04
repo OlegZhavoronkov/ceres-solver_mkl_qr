@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2015 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -73,7 +73,7 @@ TEST(TrustRegionPreprocessor, ParameterBlockBoundsAreInvalid) {
   EXPECT_FALSE(preprocessor.Preprocess(options, &problem, &pp));
 }
 
-TEST(TrustRegionPreprocessor, ParamterBlockIsInfeasible) {
+TEST(TrustRegionPreprocessor, ParameterBlockIsInfeasible) {
   ProblemImpl problem;
   double x = 3.0;
   problem.AddParameterBlock(&x, 1);

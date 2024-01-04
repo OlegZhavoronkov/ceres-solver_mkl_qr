@@ -32,12 +32,7 @@ jobs:
           - '28'
 
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Setup Ninja
-        uses: ashutoshvarma/setup-ninja@master
-        with:
-          version: 1.10.0
+      - uses: actions/checkout@v3
 
       - name: Setup Dependencies
         run: |
@@ -46,9 +41,19 @@ jobs:
             ccache \
             ninja-build
 
+      # Ensure the declared NDK version is always installed even if it's removed
+      # from the virtual environment.
+      - name: Setup NDK
+        env:
+          ANDROID_NDK_VERSION: 23.2.8568313
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
+          echo 'y' | ${{env.ANDROID_SDK_ROOT}}/cmdline-tools/latest/bin/sdkmanager --install 'ndk;${{env.ANDROID_NDK_VERSION}}'
+          echo "ANDROID_NDK_ROOT=${{env.ANDROID_SDK_ROOT}}/ndk/${{env.ANDROID_NDK_VERSION}}" >> $GITHUB_ENV
+
       - name: Cache Eigen
         id: cache-eigen
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: eigen/
           key: NDK-${{matrix.os}}-eigen-3.4.0-${{matrix.abi}}
@@ -77,7 +82,7 @@ jobs:
 
       - name: Cache gflags
         id: cache-gflags
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: gflags/
           key: NDK-${{matrix.os}}-gflags-2.2.2-${{matrix.abi}}-${{matrix.build_type}}-${{matrix.lib}}
@@ -106,7 +111,7 @@ jobs:
 
       - name: Cache glog
         id: cache-glog
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: glog/
           key: NDK-${{matrix.os}}-glog-0.5-${{matrix.abi}}-${{matrix.build_type}}-${{matrix.lib}}
@@ -136,7 +141,7 @@ jobs:
 
       - name: Cache Build
         id: cache-build
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{env.CCACHE_DIR}}
           key: NDK-${{matrix.os}}-ccache-${{matrix.abi}}-${{matrix.build_type}}-${{matrix.lib}}-${{github.run_id}}

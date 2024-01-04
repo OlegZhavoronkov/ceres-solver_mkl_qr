@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2015 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -43,8 +43,7 @@
 #include "glog/logging.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 // This class implements the SystemTestProblem interface and provides
 // access to an implementation of Powell's singular function.
@@ -187,17 +186,6 @@ TEST_F(PowellTest, SparseNormalCholeskyUsingSuiteSparse) {
 }
 #endif  // CERES_NO_SUITESPARSE
 
-#ifndef CERES_NO_CXSPARSE
-TEST_F(PowellTest, SparseNormalCholeskyUsingCXSparse) {
-  PowellsFunction powells_function;
-  Solver::Options* options = powells_function.mutable_solver_options();
-  options->linear_solver_type = SPARSE_NORMAL_CHOLESKY;
-  options->sparse_linear_algebra_library_type = CX_SPARSE;
-  RunSolverForConfigAndExpectResidualsMatch(*options,
-                                            powells_function.mutable_problem());
-}
-#endif  // CERES_NO_CXSPARSE
-
 #ifndef CERES_NO_ACCELERATE_SPARSE
 TEST_F(PowellTest, SparseNormalCholeskyUsingAccelerateSparse) {
   PowellsFunction powells_function;
@@ -220,5 +208,4 @@ TEST_F(PowellTest, SparseNormalCholeskyUsingEigenSparse) {
 }
 #endif  // CERES_USE_EIGEN_SPARSE
 
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

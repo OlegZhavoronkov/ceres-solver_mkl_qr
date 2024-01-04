@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2015 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -396,7 +396,7 @@ int main(int argc, char** argv) {
   //
   // Initialize `X` to points on the unit circle.
   VectorXd w(num_segments + 1);
-  w.setLinSpaced(num_segments + 1, 0.0, 2.0 * M_PI);
+  w.setLinSpaced(num_segments + 1, 0.0, 2.0 * ceres::constants::pi);
   w.conservativeResize(num_segments);
   MatrixXd X(num_segments, 2);
   X.col(0) = w.array().cos();
@@ -405,9 +405,9 @@ int main(int argc, char** argv) {
   // Each data point has an associated preimage position on the line segment
   // contour. For each data point we initialize the preimage positions to
   // the index of the closest control point.
-  const int num_observations = kY.rows();
+  const int64_t num_observations = kY.rows();
   VectorXd t(num_observations);
-  for (int i = 0; i < num_observations; ++i) {
+  for (int64_t i = 0; i < num_observations; ++i) {
     (X.rowwise() - kY.row(i)).rowwise().squaredNorm().minCoeff(&t[i]);
   }
 

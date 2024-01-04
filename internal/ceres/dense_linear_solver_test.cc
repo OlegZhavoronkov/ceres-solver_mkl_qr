@@ -1,5 +1,5 @@
 // Ceres Solver - A fast non-linear least squares minimizer
-// Copyright 2017 Google Inc. All rights reserved.
+// Copyright 2023 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
 // Redistribution and use in source and binary forms, with or without
@@ -40,8 +40,7 @@
 #include "glog/logging.h"
 #include "gtest/gtest.h"
 
-namespace ceres {
-namespace internal {
+namespace ceres::internal {
 
 using Param = ::testing::
     tuple<LinearSolverType, DenseLinearAlgebraLibraryType, bool, int>;
@@ -87,7 +86,7 @@ TEST_P(DenseLinearSolverTest, _) {
   Vector solution(num_cols);
   LinearSolver::Summary summary =
       solver->Solve(&lhs, rhs.data(), per_solve_options, solution.data());
-  EXPECT_EQ(summary.termination_type, LINEAR_SOLVER_SUCCESS);
+  EXPECT_EQ(summary.termination_type, LinearSolverTerminationType::SUCCESS);
 
   Vector normal_rhs = lhs.matrix().transpose() * rhs.head(num_rows);
   Matrix normal_lhs = lhs.matrix().transpose() * lhs.matrix();
@@ -136,5 +135,4 @@ INSTANTIATE_TEST_SUITE_P(
 
 #endif
 }  // namespace
-}  // namespace internal
-}  // namespace ceres
+}  // namespace ceres::internal

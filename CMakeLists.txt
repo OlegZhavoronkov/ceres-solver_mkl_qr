@@ -1,5 +1,5 @@
 # Ceres Solver - A fast non-linear least squares minimizer
-# Copyright 2022 Google Inc. All rights reserved.
+# Copyright 2023 Google Inc. All rights reserved.
 # http://ceres-solver.org/
 #
 # Redistribution and use in source and binary forms, with or without
@@ -29,13 +29,7 @@
 # Authors: keir@google.com (Keir Mierle)
 #          alexs.mac@gmail.com (Alex Stewart)
 
-cmake_minimum_required(VERSION 3.10)
-
-if (POLICY CMP0074) # Added in CMake 3.12
-  # FindTBB.cmake uses TBB_ROOT in a way that is historical, but also compliant
-  # with CMP0074 so suppress the legacy compatibility warning and allow its use.
-  cmake_policy(SET CMP0074 NEW)
-endif()
+cmake_minimum_required(VERSION 3.16...3.27)
 
 # On macOS, add the Homebrew prefix (with appropriate suffixes) to the
 # respective HINTS directories (after any user-specified locations).  This
@@ -118,33 +112,21 @@ read_ceres_version_from_source(${Ceres_SOURCE_DIR})
 
 enable_testing()
 
-include(CeresThreadingModels)
+include(CMakeDependentOption)
 include(PrettyPrintCMakeList)
-find_available_ceres_threading_models(CERES_THREADING_MODELS_AVAILABLE)
-pretty_print_cmake_list(PRETTY_CERES_THREADING_MODELS_AVAILABLE
-  ${CERES_THREADING_MODELS_AVAILABLE})
-message("-- Detected available Ceres threading models: "
-  "${PRETTY_CERES_THREADING_MODELS_AVAILABLE}")
-set(CERES_THREADING_MODEL "${CERES_THREADING_MODEL}" CACHE STRING
-  "Ceres threading back-end" FORCE)
-if (NOT CERES_THREADING_MODEL)
-  list(GET CERES_THREADING_MODELS_AVAILABLE 0 DEFAULT_THREADING_MODEL)
-  update_cache_variable(CERES_THREADING_MODEL ${DEFAULT_THREADING_MODEL})
-endif()
-set_property(CACHE CERES_THREADING_MODEL PROPERTY STRINGS
-  ${CERES_THREADING_MODELS_AVAILABLE})
 
 option(MINIGLOG "Use a stripped down version of glog." OFF)
 option(GFLAGS "Enable Google Flags." ON)
 option(SUITESPARSE "Enable SuiteSparse." ON)
-option(CXSPARSE "Enable CXSparse." ON)
 if (APPLE)
   option(ACCELERATESPARSE
     "Enable use of sparse solvers in Apple's Accelerate framework." ON)
   option(ENABLE_BITCODE
     "Enable bitcode for iOS builds (disables inline optimizations for Eigen)." OFF)
 endif()
-option(CUDA "Enable use of CUDA linear algebra solvers." ON)
+# We can't have an option called 'CUDA' since that is a reserved word -- a
+# language definition.
+option(USE_CUDA "Enable use of CUDA linear algebra solvers." ON)
 option(LAPACK "Enable use of LAPACK directly within Ceres." ON)
 # Template specializations for the Schur complement based solvers. If
 # compile time, binary size or compiler performance is an issue, you
@@ -156,6 +138,7 @@ option(CUSTOM_BLAS
 # Enable the use of Eigen as a sparse linear algebra library for
 # solving the nonlinear least squares problems.
 option(EIGENSPARSE "Enable Eigen as a sparse linear algebra library." ON)
+cmake_dependent_option(EIGENMETIS "Enable Eigen METIS support." ON EIGENSPARSE OFF)
 option(EXPORT_BUILD_DIR
   "Export build directory using CMake (enables external use without install)." OFF)
 option(BUILD_TESTING "Enable tests" ON)
@@ -169,11 +152,6 @@ include(EnableSanitizer)
 enable_sanitizer(${SANITIZERS})
 if (ANDROID)
   option(ANDROID_STRIP_DEBUG_SYMBOLS "Strip debug symbols from Android builds (reduces file sizes)" ON)
-endif()
-if (MSVC)
-  # TODO Not needed starting CMake 3.15 which provides CMAKE_MSVC_RUNTIME_LIBRARY
-  option(MSVC_USE_STATIC_CRT
-    "MS Visual Studio: Use static C-Run Time Library in place of shared." OFF)
 endif()
 
 # IOS is defined iff using the iOS.cmake CMake toolchain to build a static
@@ -193,8 +171,8 @@ if (IOS)
   # Apple claims that the BLAS call dsyrk_ is a private API, and will not allow
   # you to submit to the Apple Store if the symbol is present.
   update_cache_variable(LAPACK OFF)
-  message(STATUS "Building for iOS: SuiteSparse, CXSparse, LAPACK, gflags, "
-    "and OpenMP are not available.")
+  message(STATUS "Building for iOS: SuiteSparse, LAPACK, gflags "
+    "are not available.")
 
   update_cache_variable(BUILD_EXAMPLES OFF)
   message(STATUS "Building for iOS: Will not build examples.")
@@ -226,22 +204,70 @@ if (Eigen3_FOUND)
   endif (EIGENSPARSE)
 endif (Eigen3_FOUND)
 
-if (CUDA)
-  find_package(CUDA QUIET)
-  if (CUDA_FOUND)
-    message("-- Found CUDA version ${CUDA_VERSION}: "
-        "${CUDA_LIBRARIES};"
-        "${CUDA_cusolver_LIBRARY};"
-        "${CUDA_cusparse_LIBRARY}")
-  else (CUDA_FOUND)
-    message("-- Did not find CUDA library, disabling CUDA support.")
-    update_cache_variable(CUDA OFF)
-    list(APPEND CERES_COMPILE_OPTIONS CERES_NO_CUDA)
-  endif (CUDA_FOUND)
-else (CUDA)
+if (USE_CUDA)
+  if (CMAKE_VERSION VERSION_LESS 3.17)
+    # On older versions of CMake (20.04 default is 3.16) FindCUDAToolkit was
+    # not available, but FindCUDA was deprecated. To avoid special-case handling
+    # elsewhere, emulate the effects of FindCUDAToolkit locally in terms of the
+    # expected CMake imported targets and defined variables. This can be removed
+    # from as soon as the min CMake version is >= 3.17.
+    find_package(CUDA QUIET)
+    if (CUDA_FOUND)
+      message("-- Found CUDA version ${CUDA_VERSION} installed in: "
+        "${CUDA_TOOLKIT_ROOT_DIR} via legacy (< 3.17) CMake module. "
+        "Using the legacy CMake module means that any installation of "
+        "Ceres will require that the CUDA libraries be installed in a "
+        "location included in the LD_LIBRARY_PATH.")
+      enable_language(CUDA)
+
+      macro(DECLARE_IMPORTED_CUDA_TARGET COMPONENT)
+        add_library(CUDA::${COMPONENT} INTERFACE IMPORTED)
+        target_include_directories(
+          CUDA::${COMPONENT} INTERFACE ${CUDA_INCLUDE_DIRS})
+        target_link_libraries(
+          CUDA::${COMPONENT} INTERFACE ${CUDA_${COMPONENT}_LIBRARY} ${ARGN})
+      endmacro()
+
+      declare_imported_cuda_target(cublas)
+      declare_imported_cuda_target(cusolver)
+      declare_imported_cuda_target(cusparse)
+      declare_imported_cuda_target(cudart ${CUDA_LIBRARIES})
+
+      set(CUDAToolkit_BIN_DIR ${CUDA_TOOLKIT_ROOT_DIR}/bin)
+
+    else (CUDA_FOUND)
+      message("-- Did not find CUDA, disabling CUDA support.")
+      update_cache_variable(USE_CUDA OFF)
+    endif (CUDA_FOUND)
+  else (CMAKE_VERSION VERSION_LESS 3.17)
+    find_package(CUDAToolkit QUIET)
+    if (CUDAToolkit_FOUND)
+      message("-- Found CUDA version ${CUDAToolkit_VERSION} installed in: "
+        "${CUDAToolkit_TARGET_DIR}")
+      set(CUDAToolkit_DEPENDENCY
+        "find_dependency(CUDAToolkit ${CUDAToolkit_VERSION})")
+      enable_language(CUDA)
+      if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
+        # Support Maxwell, Pascal, Volta, Turing, and Ampere GPUs.
+        set(CMAKE_CUDA_ARCHITECTURES "50;60;70;80")
+        message("-- Setting CUDA Architecture to ${CMAKE_CUDA_ARCHITECTURES}")
+      endif()
+      list(APPEND CERES_CUDA_LIBRARIES
+        CUDA::cublas
+        CUDA::cudart
+        CUDA::cusolver
+        CUDA::cusparse)
+      set(CMAKE_CUDA_RUNTIME_LIBRARY NONE)
+    else (CUDAToolkit_FOUND)
+      message("-- Did not find CUDA, disabling CUDA support.")
+      update_cache_variable(USE_CUDA OFF)
+    endif (CUDAToolkit_FOUND)
+  endif (CMAKE_VERSION VERSION_LESS 3.17)
+endif (USE_CUDA)
+if (NOT USE_CUDA)
   message("-- Building without CUDA.")
   list(APPEND CERES_COMPILE_OPTIONS CERES_NO_CUDA)
-endif (CUDA)
+endif (NOT USE_CUDA)
 
 if (LAPACK)
   find_package(LAPACK QUIET)
@@ -296,7 +322,8 @@ if (SUITESPARSE)
   # built with SuiteSparse support.
 
   # Check for SuiteSparse and dependencies.
-  find_package(SuiteSparse COMPONENTS CHOLMOD SPQR)
+  find_package(SuiteSparse 4.5.6 COMPONENTS CHOLMOD SPQR
+    OPTIONAL_COMPONENTS Partition)
   if (SuiteSparse_FOUND)
     set(SuiteSparse_DEPENDENCY "find_dependency(SuiteSparse ${SuiteSparse_VERSION})")
     # By default, if all of SuiteSparse's dependencies are found, Ceres is
@@ -321,31 +348,32 @@ else (SUITESPARSE)
   list(APPEND CERES_COMPILE_OPTIONS CERES_NO_SUITESPARSE)
 endif (SUITESPARSE)
 
-# CXSparse.
-if (CXSPARSE)
-  # Don't search with REQUIRED as we can continue without CXSparse.
-  find_package(CXSparse)
-  if (CXSparse_FOUND)
-    set(CXSparse_DEPENDENCY "find_dependency(CXSparse ${CXSparse_VERSION})")
-    # By default, if CXSparse and all dependencies are found, Ceres is
-    # built with CXSparse support.
-    message("-- Found CXSparse version: ${CXSparse_VERSION}, "
-      "building with CXSparse.")
+if (NOT SuiteSparse_Partition_FOUND)
+  list (APPEND CERES_COMPILE_OPTIONS CERES_NO_CHOLMOD_PARTITION)
+endif (NOT SuiteSparse_Partition_FOUND)
 
-    if (CXSparse_NO_CMAKE OR NOT CXSparse_DIR)
-      install(FILES ${Ceres_SOURCE_DIR}/cmake/FindCXSparse.cmake
+if (EIGENMETIS)
+  find_package (METIS)
+  if (METIS_FOUND)
+    # Since METIS is a private dependency of Ceres, it requires access to the
+    # link-only METIS::METIS target to avoid undefined linker errors in projects
+    # relying on Ceres. We do not actually need to propagate anything besides
+    # the link libraries (such as include directories.)
+    set(METIS_DEPENDENCY "find_dependency(METIS ${METIS_VERSION})")
+    # METIS find module must be installed unless a package config is being used.
+    if (NOT METIS_DIR)
+      install(FILES ${Ceres_SOURCE_DIR}/cmake/FindMETIS.cmake
               DESTINATION ${RELATIVE_CMAKECONFIG_INSTALL_DIR})
-    endif (CXSparse_NO_CMAKE OR NOT CXSparse_DIR)
-  else (CXSparse_FOUND)
-    # Disable use of CXSparse if it cannot be found and continue.
-    message("-- Did not find CXSparse, Building without CXSparse.")
-    update_cache_variable(CXSPARSE OFF)
-    list(APPEND CERES_COMPILE_OPTIONS CERES_NO_CXSPARSE)
-  endif (CXSparse_FOUND)
-else (CXSPARSE)
-  message("-- Building without CXSparse.")
-  list(APPEND CERES_COMPILE_OPTIONS CERES_NO_CXSPARSE)
-endif (CXSPARSE)
+    endif (NOT METIS_DIR)
+  else (METIS_FOUND)
+    message("-- Did not find METIS, disabling Eigen METIS support.")
+    update_cache_variable(EIGENMETIS OFF)
+    list (APPEND CERES_COMPILE_OPTIONS CERES_NO_EIGEN_METIS)
+  endif (METIS_FOUND)
+else (EIGENMETIS)
+  message("-- Building without Eigen METIS support.")
+  list (APPEND CERES_COMPILE_OPTIONS CERES_NO_EIGEN_METIS)
+endif (EIGENMETIS)
 
 if (ACCELERATESPARSE)
   find_package(AccelerateSparse)
@@ -366,9 +394,9 @@ else()
 endif()
 
 # Ensure that the user understands they have disabled all sparse libraries.
-if (NOT SUITESPARSE AND NOT CXSPARSE AND NOT EIGENSPARSE AND NOT ACCELERATESPARSE)
+if (NOT SUITESPARSE AND NOT EIGENSPARSE AND NOT ACCELERATESPARSE)
   message("   ===============================================================")
-  message("   Compiling without any sparse library: SuiteSparse, CXSparse ")
+  message("   Compiling without any sparse library: SuiteSparse, ")
   message("   EigenSparse & Apple's Accelerate are all disabled or unavailable.  ")
   message("   No sparse linear solvers (SPARSE_NORMAL_CHOLESKY & SPARSE_SCHUR)")
   message("   will be available when Ceres is used.")
@@ -466,8 +494,6 @@ if (NOT CUSTOM_BLAS)
   message("-- Disabling custom blas")
 endif (NOT CUSTOM_BLAS)
 
-set_ceres_threading_model("${CERES_THREADING_MODEL}")
-
 if (BUILD_BENCHMARKS)
   # Version 1.3 was first to provide import targets
   find_package(benchmark 1.3 QUIET)
@@ -520,76 +546,42 @@ endif (MINGW)
 
 # After the tweaks for the compile settings, disable some warnings on MSVC.
 if (MSVC)
-  # On MSVC, math constants are not included in <cmath> or <math.h> unless
-  # _USE_MATH_DEFINES is defined [1].  As we use M_PI in the examples, ensure
-  # that _USE_MATH_DEFINES is defined before the first inclusion of <cmath>.
-  #
-  # [1] https://msdn.microsoft.com/en-us/library/4hwaceh6.aspx
-  add_definitions("-D_USE_MATH_DEFINES")
+  # Insecure standard library functions
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+  # std::numeric_limits<T>::has_denorm is deprecated in C++23
+  add_compile_definitions($<$<COMPILE_LANGUAGE:CXX>:_SILENCE_CXX23_DENORM_DEPRECATION_WARNING>)
+  # std::aligned_storage is deprecated in C++23
+  add_compile_definitions($<$<COMPILE_LANGUAGE:CXX>:_SILENCE_CXX23_ALIGNED_STORAGE_DEPRECATION_WARNING>)
   # Disable signed/unsigned int conversion warnings.
-  add_compile_options("/wd4018" "/wd4267")
-  # Disable warning about using struct/class for the same symobl.
-  add_compile_options("/wd4099")
-  # Disable warning about the insecurity of using "std::copy".
-  add_compile_options("/wd4996")
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/wd4018>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/wd4267>)
+  # Disable warning about using struct/class for the same symbol.
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/wd4099>)
   # Disable performance warning about int-to-bool conversion.
-  add_compile_options("/wd4800")
-  # Disable performance warning about fopen insecurity.
-  add_compile_options("/wd4996")
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/wd4800>)
   # Disable warning about int64 to int32 conversion. Disabling
   # this warning may not be correct; needs investigation.
   # TODO(keir): Investigate these warnings in more detail.
-  add_compile_options("/wd4244")
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/wd4244>)
   # It's not possible to use STL types in DLL interfaces in a portable and
   # reliable way. However, that's what happens with Google Log and Google Flags
   # on Windows. MSVC gets upset about this and throws warnings that we can't do
   # much about. The real solution is to link static versions of Google Log and
   # Google Test, but that seems tricky on Windows. So, disable the warning.
-  add_compile_options("/wd4251")
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/wd4251>)
 
   # Add bigobj flag otherwise the build would fail due to large object files
   # probably resulting from generated headers (like the fixed-size schur
   # specializations).
-  add_compile_options("/bigobj")
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/bigobj>)
 
   # Google Flags doesn't have their DLL import/export stuff set up correctly,
   # which results in linker warnings. This is irrelevant for Ceres, so ignore
   # the warnings.
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ignore:4049")
 
-  # Update the C/CXX flags for MSVC to use either the static or shared
-  # C-Run Time (CRT) library based on the user option: MSVC_USE_STATIC_CRT.
-  list(APPEND C_CXX_FLAGS
-    CMAKE_CXX_FLAGS
-    CMAKE_CXX_FLAGS_DEBUG
-    CMAKE_CXX_FLAGS_RELEASE
-    CMAKE_CXX_FLAGS_MINSIZEREL
-    CMAKE_CXX_FLAGS_RELWITHDEBINFO)
-
-  foreach(FLAG_VAR ${C_CXX_FLAGS})
-    if (MSVC_USE_STATIC_CRT)
-      # Use static CRT.
-      if (${FLAG_VAR} MATCHES "/MD")
-        string(REGEX REPLACE "/MD" "/MT" ${FLAG_VAR} "${${FLAG_VAR}}")
-      endif (${FLAG_VAR} MATCHES "/MD")
-    else (MSVC_USE_STATIC_CRT)
-      # Use shared, not static, CRT.
-      if (${FLAG_VAR} MATCHES "/MT")
-        string(REGEX REPLACE "/MT" "/MD" ${FLAG_VAR} "${${FLAG_VAR}}")
-      endif (${FLAG_VAR} MATCHES "/MT")
-    endif (MSVC_USE_STATIC_CRT)
-  endforeach()
-
   # Tuple sizes of 10 are used by Gtest.
   add_definitions("-D_VARIADIC_MAX=10")
-
-  include(CheckIfUnderscorePrefixedBesselFunctionsExist)
-  check_if_underscore_prefixed_bessel_functions_exist(
-    HAVE_UNDERSCORE_PREFIXED_BESSEL_FUNCTIONS)
-  if (HAVE_UNDERSCORE_PREFIXED_BESSEL_FUNCTIONS)
-    list(APPEND CERES_COMPILE_OPTIONS
-      CERES_MSVC_USE_UNDERSCORE_PREFIXED_BESSEL_FUNCTIONS)
-  endif()
 endif (MSVC)
 
 if (UNIX)
@@ -632,20 +624,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang") # Matches Clang & AppleClang.
   endif(HAVE_RETURN_TYPE_C_LINKAGE)
 endif ()
 
-# Disable warnings about deprecated interfaces while we are
-# transitioning from LocalParameterization to Manifolds.
-add_compile_options(
-  $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:-Wno-deprecated-declarations>
-  $<$<CXX_COMPILER_ID:MSVC>:/wd4996>)
-
-if (CMAKE_VERSION VERSION_LESS 3.12)
-  # Disable the definiton of min/max macros within the project
-  if (WIN32)
-    add_definitions (-DNOMINMAX)
-  endif (WIN32)
-else (CMAKE_VERSION VERSION_LESS 3.12)
-  add_compile_definitions($<$<BOOL:${WIN32}>:NOMINMAX>)
-endif (CMAKE_VERSION VERSION_LESS 3.12)
+add_compile_definitions($<$<BOOL:${WIN32}>:NOMINMAX>)
 
 # Configure the Ceres config.h compile options header using the current
 # compile options and put the configured header into the Ceres build
@@ -661,8 +640,8 @@ create_ceres_config("${CERES_COMPILE_OPTIONS}"
 add_subdirectory(internal/ceres)
 
 if (BUILD_DOCUMENTATION)
-  find_package(Sphinx)
-  if (NOT SPHINX_FOUND)
+  find_package (Sphinx REQUIRED COMPONENTS sphinx_rtd_theme)
+  if (NOT Sphinx_FOUND)
     message("-- Failed to find Sphinx and/or its dependencies, disabling build of documentation.")
     update_cache_variable(BUILD_DOCUMENTATION OFF)
   else()
@@ -802,12 +781,22 @@ if (EXPORT_BUILD_DIR)
     ${Ceres_BINARY_DIR}
     ${Ceres_SOURCE_DIR})
 
+  set (Ceres_EXPORT_TARGETS ceres)
+
+  if (TARGET ceres_cuda_kernels)
+    # The target ceres depends on ceres_cuda_kernels requiring the latter to be
+    # exported as part of the same export set.
+    list (APPEND Ceres_EXPORT_TARGETS ceres_cuda_kernels)
+  endif (TARGET ceres_cuda_kernels)
+
   # Analogously to install(EXPORT ...), export the Ceres target from the build
   # directory as a package called Ceres into the local CMake package registry.
-  export(TARGETS ceres
+  export(TARGETS ${Ceres_EXPORT_TARGETS}
          NAMESPACE Ceres::
          FILE ${Ceres_BINARY_DIR}/CeresTargets.cmake)
   export(PACKAGE ${CMAKE_PROJECT_NAME})
+
+  unset (Ceres_EXPORT_TARGETS)
 
   # Configure a CeresConfig.cmake file for the export of the Ceres build
   # directory from the template, reflecting the current build options.
