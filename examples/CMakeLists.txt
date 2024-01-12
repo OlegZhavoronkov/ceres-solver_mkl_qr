@@ -27,7 +27,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 # Author: keir@google.com (Keir Mierle)
-
+find_package(fmt REQUIRED)
 add_executable(helloworld helloworld.cc)
 target_link_libraries(helloworld PRIVATE Ceres::ceres SuiteSparse::CHOLMOD)
 
@@ -80,6 +80,10 @@ target_link_libraries(iteration_callback_example PRIVATE Ceres::ceres)
 
 add_executable(evaluation_callback_example evaluation_callback_example.cc)
 target_link_libraries(evaluation_callback_example PRIVATE Ceres::ceres)
+
+add_executable(jet_investigation gpu_jet/jet_investigation.cc gpu_jet/GpuJetHolder.h gpu_jet/GpuJetHolder.cpp gpu_jet/GpuJetHolder.cu)
+#target_include_directories(jet_investigation PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../internal)
+target_link_libraries(jet_investigation PRIVATE Ceres::ceres fmt cudart ceres_internal SuiteSparse::CHOLMOD)
 
 if (GFLAGS)
   add_executable(powell powell.cc)
