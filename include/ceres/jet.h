@@ -175,7 +175,7 @@
 #define JET_CUDA_DEVICE_TAG __device__
 #endif
 #ifndef JET_CUDA_HOST_TAG
-#define JET_CUDA_HOST_TAG __device__
+#define JET_CUDA_HOST_TAG __host__
 #endif
 #else
 #ifndef JET_CUDA_DEVICE_TAG
