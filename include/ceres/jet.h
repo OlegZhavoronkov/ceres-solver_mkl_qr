@@ -170,7 +170,24 @@
 #include "ceres/internal/jet_traits.h"
 #include "ceres/internal/port.h"
 #include "ceres/jet_fwd.h"
-
+#ifdef __CUDACC__
+#ifndef JET_CUDA_DEVICE_TAG
+#define JET_CUDA_DEVICE_TAG __device__
+#endif
+#ifndef JET_CUDA_HOST_TAG
+#define JET_CUDA_HOST_TAG __device__
+#endif
+#else
+#ifndef JET_CUDA_DEVICE_TAG
+#define JET_CUDA_DEVICE_TAG 
+#endif
+#ifndef JET_CUDA_HOST_TAG
+#define JET_CUDA_HOST_TAG 
+#endif
+#endif
+#ifndef JET_CUDA_DEVICE_HOST
+#define JET_CUDA_DEVICE_HOST JET_CUDA_DEVICE_TAG JET_CUDA_HOST_TAG
+#endif
 // Here we provide partial specializations of std::common_type for the Jet class
 // to allow determining a Jet type with a common underlying arithmetic type.
 // Such an arithmetic type can be either a scalar or an another Jet. An example
@@ -217,16 +234,24 @@ struct Jet {
   // (where T is a Jet<T, N>). This usually only happens in opt mode. Note that
   // the C++ standard mandates that e.g. default constructed doubles are
   // initialized to 0.0; see sections 8.5 of the C++03 standard.
-  Jet() : a() { v.setConstant(Scalar()); }
+  JET_CUDA_DEVICE_HOST
+  Jet( ) : a( )
+  {
+      v.setConstant( Scalar( ) );
+  }
 
   // Constructor from scalar: a + 0.
-  explicit Jet(const T& value) {
+  JET_CUDA_DEVICE_HOST
+  explicit Jet( const T& value )
+  {
     a = value;
     v.setConstant(Scalar());
   }
 
   // Constructor from scalar plus variable: a + t_i.
-  Jet(const T& value, int k) {
+  JET_CUDA_DEVICE_HOST
+  Jet( const T& value , int k )
+  {
     a = value;
     v.setConstant(Scalar());
     v[k] = T(1.0);
@@ -237,47 +262,65 @@ struct Jet {
   // to be passed in without being fully evaluated until
   // they are assigned to v
   template <typename Derived>
-  EIGEN_STRONG_INLINE Jet(const T& a, const Eigen::DenseBase<Derived>& v)
-      : a(a), v(v) {}
+  EIGEN_STRONG_INLINE JET_CUDA_DEVICE_HOST
+      Jet( const T& a , const Eigen::DenseBase<Derived>& v )
+      : a( a ) , v( v )
+  { }
 
   // Compound operators
-  Jet<T, N>& operator+=(const Jet<T, N>& y) {
+  JET_CUDA_DEVICE_HOST
+  Jet<T , N>& operator+=( const Jet<T , N>& y )
+  {
     *this = *this + y;
     return *this;
   }
 
-  Jet<T, N>& operator-=(const Jet<T, N>& y) {
+  JET_CUDA_DEVICE_HOST
+  Jet<T , N>& operator-=( const Jet<T , N>& y )
+  {
     *this = *this - y;
     return *this;
   }
 
-  Jet<T, N>& operator*=(const Jet<T, N>& y) {
+  JET_CUDA_DEVICE_HOST
+  Jet<T , N>& operator*=( const Jet<T , N>& y )
+  {
     *this = *this * y;
     return *this;
   }
 
-  Jet<T, N>& operator/=(const Jet<T, N>& y) {
+  JET_CUDA_DEVICE_HOST
+  Jet<T , N>& operator/=( const Jet<T , N>& y )
+  {
     *this = *this / y;
     return *this;
   }
 
   // Compound with scalar operators.
-  Jet<T, N>& operator+=(const T& s) {
+  JET_CUDA_DEVICE_HOST
+  Jet<T , N>& operator+=( const T& s )
+  {
     *this = *this + s;
     return *this;
   }
 
-  Jet<T, N>& operator-=(const T& s) {
+  JET_CUDA_DEVICE_HOST
+  Jet<T , N>& operator-=( const T& s )
+  {
     *this = *this - s;
     return *this;
   }
 
-  Jet<T, N>& operator*=(const T& s) {
+  JET_CUDA_DEVICE_HOST
+  Jet<T , N>& operator*=( const T& s )
+  {
     *this = *this * s;
     return *this;
   }
 
-  Jet<T, N>& operator/=(const T& s) {
+  JET_CUDA_DEVICE_HOST
+  Jet<T , N>& operator/=( const T& s )
+  {
     *this = *this / s;
     return *this;
   }
@@ -294,8 +337,11 @@ struct Jet {
 };
 
 // Unary +
-template <typename T, int N>
-inline Jet<T, N> const& operator+(const Jet<T, N>& f) {
+
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> const& operator+( const Jet<T , N>& f )
+{
   return f;
 }
 
@@ -303,68 +349,91 @@ inline Jet<T, N> const& operator+(const Jet<T, N>& f) {
 // see if it causes a performance increase.
 
 // Unary -
-template <typename T, int N>
-inline Jet<T, N> operator-(const Jet<T, N>& f) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator-( const Jet<T , N>& f )
+{
   return Jet<T, N>(-f.a, -f.v);
 }
 
 // Binary +
-template <typename T, int N>
-inline Jet<T, N> operator+(const Jet<T, N>& f, const Jet<T, N>& g) {
+
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator+( const Jet<T , N>& f , const Jet<T , N>& g )
+{
   return Jet<T, N>(f.a + g.a, f.v + g.v);
 }
 
 // Binary + with a scalar: x + s
-template <typename T, int N>
-inline Jet<T, N> operator+(const Jet<T, N>& f, T s) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator+( const Jet<T , N>& f , T s )
+{
   return Jet<T, N>(f.a + s, f.v);
 }
 
 // Binary + with a scalar: s + x
-template <typename T, int N>
-inline Jet<T, N> operator+(T s, const Jet<T, N>& f) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator+( T s , const Jet<T , N>& f )
+{
   return Jet<T, N>(f.a + s, f.v);
 }
 
 // Binary -
-template <typename T, int N>
-inline Jet<T, N> operator-(const Jet<T, N>& f, const Jet<T, N>& g) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator-( const Jet<T , N>& f , const Jet<T , N>& g )
+{
   return Jet<T, N>(f.a - g.a, f.v - g.v);
 }
 
 // Binary - with a scalar: x - s
-template <typename T, int N>
-inline Jet<T, N> operator-(const Jet<T, N>& f, T s) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator-( const Jet<T , N>& f , T s )
+{
   return Jet<T, N>(f.a - s, f.v);
 }
 
 // Binary - with a scalar: s - x
-template <typename T, int N>
-inline Jet<T, N> operator-(T s, const Jet<T, N>& f) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator-( T s , const Jet<T , N>& f )
+{
   return Jet<T, N>(s - f.a, -f.v);
 }
 
 // Binary *
-template <typename T, int N>
-inline Jet<T, N> operator*(const Jet<T, N>& f, const Jet<T, N>& g) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator*( const Jet<T , N>& f , const Jet<T , N>& g )
+{
   return Jet<T, N>(f.a * g.a, f.a * g.v + f.v * g.a);
 }
 
 // Binary * with a scalar: x * s
-template <typename T, int N>
-inline Jet<T, N> operator*(const Jet<T, N>& f, T s) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator*( const Jet<T , N>& f , T s )
+{
   return Jet<T, N>(f.a * s, f.v * s);
 }
 
 // Binary * with a scalar: s * x
-template <typename T, int N>
-inline Jet<T, N> operator*(T s, const Jet<T, N>& f) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator*( T s , const Jet<T , N>& f )
+{
   return Jet<T, N>(f.a * s, f.v * s);
 }
 
 // Binary /
-template <typename T, int N>
-inline Jet<T, N> operator/(const Jet<T, N>& f, const Jet<T, N>& g) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator/( const Jet<T , N>& f , const Jet<T , N>& g )
+{
   // This uses:
   //
   //   a + u   (a + u)(b - v)   (a + u)(b - v)
@@ -378,15 +447,19 @@ inline Jet<T, N> operator/(const Jet<T, N>& f, const Jet<T, N>& g) {
 }
 
 // Binary / with a scalar: s / x
-template <typename T, int N>
-inline Jet<T, N> operator/(T s, const Jet<T, N>& g) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator/( T s , const Jet<T , N>& g )
+{
   const T minus_s_g_a_inverse2 = -s / (g.a * g.a);
   return Jet<T, N>(s / g.a, g.v * minus_s_g_a_inverse2);
 }
 
 // Binary / with a scalar: x / s
-template <typename T, int N>
-inline Jet<T, N> operator/(const Jet<T, N>& f, T s) {
+template <typename T , int N>
+JET_CUDA_DEVICE_HOST
+inline Jet<T , N> operator/( const Jet<T , N>& f , T s )
+{
   const T s_inverse = T(1.0) / s;
   return Jet<T, N>(f.a * s_inverse, f.v * s_inverse);
 }

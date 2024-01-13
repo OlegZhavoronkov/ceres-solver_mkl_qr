@@ -4,6 +4,7 @@
 #include "ceres/jet.h"
 #include <array>
 #include "ceres/internal/autodiff.h"
+#include "GpuJetHolder.h"
 //let's start with simple cubic function a3*x^3+a2*x^2+a1*x+a0
 
 constexpr const double a3 = 10;
@@ -116,11 +117,19 @@ void _2_args_cpu( )
     }
 }
 
+void _1_args_gpu( )
+{
+    ceres::examples::internal::GpuJetHolder holder( 40000 );
+    holder.FillData( );
+    holder.Run( );
+}
+
 int main( int argc , char** argv )
 {
     GFLAGS_NAMESPACE::ParseCommandLineFlags( &argc , &argv , true );
     google::InitGoogleLogging( argv[ 0 ] );
     //one_arg_cpu( );
-    _2_args_cpu( );
+    //_2_args_cpu( );
+    _1_args_gpu( );
     return 0;
 }

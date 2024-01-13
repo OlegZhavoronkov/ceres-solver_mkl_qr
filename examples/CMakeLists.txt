@@ -83,7 +83,7 @@ target_link_libraries(evaluation_callback_example PRIVATE Ceres::ceres)
 
 add_executable(jet_investigation gpu_jet/jet_investigation.cc gpu_jet/GpuJetHolder.h gpu_jet/GpuJetHolder.cpp gpu_jet/GpuJetHolder.cu)
 #target_include_directories(jet_investigation PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../internal)
-target_link_libraries(jet_investigation PRIVATE Ceres::ceres fmt cudart ceres_internal SuiteSparse::CHOLMOD)
+target_link_libraries(jet_investigation PRIVATE Ceres::ceres fmt cudart ceres_internal SuiteSparse::CHOLMOD SuiteSparse::SPQR cublas cusolver cusparse)
 
 if (GFLAGS)
   add_executable(powell powell.cc)
