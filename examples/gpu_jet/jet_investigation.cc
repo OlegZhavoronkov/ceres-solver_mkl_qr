@@ -119,7 +119,7 @@ void _2_args_cpu( )
 
 void _1_args_gpu( )
 {
-    ceres::examples::internal::GpuJetHolder holder( 100 );
+    ceres::examples::internal::GpuJetHolder holder( 40000 );
     holder.FillData( );
     holder.Run( );
 }
