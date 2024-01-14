@@ -64,9 +64,9 @@ public:
     void Run( );
     using JetT = ceres::Jet<float , 2>;
 private:
-    void RunInternal( clock_t& gpuDuration );
+    void RunInternalGPUWithSettings( clock_t& gpuDuration ,unsigned int pperThread,int NumThreadsInBlock );
     void RunInternalCPU(clock_t& cpuDuration );
-
+    void RunInternalGPU( clock_t& gpuDuration );
     using CudaJetBuffer = ceres::internal::CudaBuffer<JetT>;
     using CudaFloatBuffer = ceres::internal::CudaBuffer<float>;
     size_t _points_num;
@@ -75,6 +75,7 @@ private:
     std::unique_ptr<CudaJetBuffer> _pCudaBuffer;
     std::unique_ptr<CudaFloatBuffer> _devPoints;
     std::unique_ptr<CudaFloatBuffer> _devDerives;
+    std::unique_ptr<ceres::internal::CudaBuffer<VectorScalarCostFunctor> > _devFunctor;
 };
 
 }

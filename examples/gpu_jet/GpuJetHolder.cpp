@@ -30,7 +30,8 @@ GpuJetHolder::GpuJetHolder( size_t pointsNum )
         _derives.reset( new float[ 2 * _points_num ] );
         _pCudaBuffer.reset( new CudaJetBuffer( Context.get() , 2 * _points_num ) );
         _devPoints.reset( new CudaFloatBuffer( Context.get() , 2 * _points_num ) );
-        _devDerives.reset( new CudaFloatBuffer( Context.get() , 2 * _points_num ) );
+        _devDerives.reset( new CudaFloatBuffer( Context.get( ) , 2 * _points_num ) );
+        _devFunctor.reset( new ceres::internal::CudaBuffer<VectorScalarCostFunctor>( Context.get( ) , 1 ) );
     }
 }
 
@@ -48,7 +49,7 @@ void GpuJetHolder::Run( )
 {
     clock_t this_run;
     double whole_duration_gpu{ 0 } , whole_duration_cpu{ 0 };
-    RunInternal( this_run );
+    RunInternalGPU( this_run );
     whole_duration_gpu += this_run*1000.0/CLOCKS_PER_SEC;
     RunInternalCPU( this_run );
     whole_duration_cpu += this_run*1000.0/CLOCKS_PER_SEC;
@@ -66,7 +67,7 @@ void GpuJetHolder::RunInternalCPU( clock_t& cpuDuration )
         jet_args[ 2 * i ] = JetT( _points[ i * 2 ] , 0 );
         jet_args[ 2 * i + 1 ] = JetT( _points[ i * 2 + 1 ] , 1 );
     }
-    ScalarScalarCostFunctor cf;
+    VectorScalarCostFunctor cf;
     for (size_t i = 0; i < _points_num; i++)
     {
         cf( &jet_args[ 2*i ] , &jet_res[i] );
@@ -77,6 +78,37 @@ void GpuJetHolder::RunInternalCPU( clock_t& cpuDuration )
         cpu_deriv[ 2*i +1] = jet_res[ i ].v[ 1 ];
     }
     cpuDuration = clock() - cpu_start;
+}
+
+void GpuJetHolder::RunInternalGPU( clock_t& gpuDuration )
+{
+    clock_t min_clock = std::numeric_limits<clock_t>::max( );
+    int best_time_ppthread;
+    int best_time_numThreads;
+    for (int i = 1; i <= 64; i++)
+    {
+        for (int numThreads = 32; numThreads <= 1024; numThreads += 8)
+        {
+            clock_t curr_clock_summ{ 0 };
+            unsigned int passes_num = 20;
+            for (unsigned int j = 0; j < passes_num; j++)
+            {
+                clock_t curr_clock;
+                RunInternalGPUWithSettings( curr_clock , i , numThreads );
+                curr_clock_summ += curr_clock;
+            }
+            curr_clock_summ = ( clock_t ) ( curr_clock_summ / (1.0*passes_num) );
+            if (min_clock > curr_clock_summ)
+            {
+                best_time_ppthread = i;
+                best_time_numThreads = numThreads;
+                min_clock = curr_clock_summ;
+            }
+            //fmt::print( "pperthread {} numThreads {} {} msec\n" ,i,numThreads, ( curr_clock_summ * 1000.0 ) / CLOCKS_PER_SEC );
+        }
+    }
+    gpuDuration = min_clock;
+    fmt::print( "best time {} msec pperthread {} numThreads {}\n" , ( min_clock * 1000.0 ) / CLOCKS_PER_SEC , best_time_ppthread , best_time_numThreads );
 }
 
 }

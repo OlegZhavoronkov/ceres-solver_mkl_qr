@@ -8,7 +8,7 @@
 namespace ceres::examples::internal
 {
 
-__global__ void Kernel( const float* pData , float* derive , unsigned int NumPoints,GpuJetHolder::JetT* pJets,unsigned int pperthread )
+__global__ void Kernel( const float* pData , float* derive , unsigned int NumPoints,GpuJetHolder::JetT* pJets,unsigned int pperthread,VectorScalarCostFunctor Functor )
 {
     int currIdx = threadIdx.x + blockDim.x * blockIdx.x;
     if (currIdx*pperthread > (NumPoints+pperthread))
@@ -26,22 +26,22 @@ __global__ void Kernel( const float* pData , float* derive , unsigned int NumPoi
         jetArg[ 0 ] = GpuJetHolder::JetT( pData[ pIdx * 2 ] , 0 );
         jetArg[ 1 ] = GpuJetHolder::JetT( pData[ pIdx * 2 +1] , 1 );
         GpuJetHolder::JetT res;
-        ScalarScalarCostFunctor cf;
-        cf( jetArg , &res );
+        
+        Functor( jetArg , &res );
         derive[ pIdx * 2 ] = res.v[ 0 ];
         derive[ pIdx * 2 +1] = res.v[ 1 ];
     }
     
 }
 
-void GpuJetHolder::RunInternal(clock_t& gpu_dur )
+void GpuJetHolder::RunInternalGPUWithSettings(clock_t& gpu_dur,unsigned int pperThread,int NumThreadsInBlock )
 {
-    unsigned int pperThread = 2;
+    //unsigned int pperThread = 2;
     auto gpu_start = clock( );
     _devPoints->CopyFromCpu( _points.get( ) , 2 * _points_num );
-    const int NumThreadsInBlock = 64;
+    //const int NumThreadsInBlock = 64;
     const int NumBlocks = ( _points_num / (pperThread*NumThreadsInBlock) ) + (_points_num % (pperThread*NumThreadsInBlock) == 0 ? 0 : 1);
-    Kernel << <NumBlocks , NumThreadsInBlock >> > ( _devPoints->data( ) , _devDerives->data( ) , _points_num,_pCudaBuffer->data(),pperThread );
+    Kernel << <NumBlocks , NumThreadsInBlock >> > ( _devPoints->data( ) , _devDerives->data( ) , _points_num,_pCudaBuffer->data(),pperThread,VectorScalarCostFunctor() );
     auto res = ::cudaThreadSynchronize( );
     if (res != cudaError_t::cudaSuccess)
     {
