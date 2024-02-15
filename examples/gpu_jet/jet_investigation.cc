@@ -138,7 +138,7 @@ int main( int argc , char** argv )
     //one_arg_cpu( );
     //_2_args_cpu( );
     //_1_args_gpu( );
-    time_measurement_vector2scalar( );
+    //time_measurement_vector2scalar( );
     _2_args_gpu( );
     return 0;
 }

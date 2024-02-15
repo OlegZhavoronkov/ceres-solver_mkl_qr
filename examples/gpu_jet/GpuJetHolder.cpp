@@ -61,7 +61,7 @@ void GpuJetHolder::RunAndCompare( )
     clock_t this_run_cpu{},this_run_gpu{};
     DeriveMatrix cpu_derives = RunInternalCPU( this_run_cpu );
     DeriveMatrix gpu_derives = RunInternalGPUWithSettings( this_run_gpu , 1 , 256 );
-    fmt::print( "cpu_derives {0} {1}\n" , cpu_derives.rows( ) , cpu_derives.cols( ) );
+    fmt::print( "cpu time {0} ms gpu time {1} ms\n" , this_run_cpu*1000.0/CLOCKS_PER_SEC,this_run_gpu*1000.0/CLOCKS_PER_SEC );
     for (int i = 0; i < cpu_derives.rows( ) - 1; i += 1000)
     {
         fmt::print( "{0} cpu {1} {2} gpu {3} {4}\n" , i , cpu_derives( i , 0 ) , cpu_derives( i , 1 ) , gpu_derives( i , 0 ) , gpu_derives( i , 1 ) );
