@@ -26,8 +26,8 @@ GpuJetHolder::GpuJetHolder( size_t pointsNum )
     if (_points_num > 0)
     {
         
-        _points.reset( new float[ 2 * _points_num ] );
-        _derives.reset( new float[ 2 * _points_num ] );
+        _points.reset( new  GpuJetHolder::ScalarType[ 2 * _points_num ] );
+        _derives.reset( new GpuJetHolder::ScalarType[ 2 * _points_num ] );
         _pCudaBuffer.reset( new CudaJetBuffer( Context.get() , 2 * _points_num ) );
         _devPoints.reset( new CudaFloatBuffer( Context.get() , 2 * _points_num ) );
         _devDerives.reset( new CudaFloatBuffer( Context.get( ) , 2 * _points_num ) );
@@ -39,7 +39,7 @@ void GpuJetHolder::FillData( )
 {
     for (size_t i = 0; i < _points_num; i++)
     {
-        float* pPoint = _points.get( ) + 2 * i;
+        GpuJetHolder::ScalarType* pPoint = _points.get( ) + 2 * i;
         pPoint[ 0 ] = (i * 4 + 1)*M_1_PI;
         pPoint[ 1 ] = (i * 5 + 1)*M_1_PI;
     }

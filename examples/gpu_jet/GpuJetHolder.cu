@@ -8,7 +8,7 @@
 namespace ceres::examples::internal
 {
 
-__global__ void Kernel( const float* pData , float* derive , unsigned int NumPoints,GpuJetHolder::JetT* pJets,unsigned int pperthread,VectorScalarCostFunctor Functor )
+__global__ void Kernel( const GpuJetHolder::ScalarType* pData , GpuJetHolder::ScalarType* derive , unsigned int NumPoints,GpuJetHolder::JetT* pJets,unsigned int pperthread,VectorScalarCostFunctor Functor )
 {
     const unsigned int currThreadIdx = threadIdx.x + blockDim.x * blockIdx.x;
     if (currThreadIdx * pperthread >= NumPoints + pperthread)

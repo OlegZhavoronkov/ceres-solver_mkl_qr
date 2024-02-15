@@ -30,11 +30,11 @@ struct ScalarScalarCostFunctor
 
 struct VectorScalarCostFunctor
 {
-    constexpr static const float a3 = 10;
-    constexpr static const float a2 = 5;
-    constexpr static const float a1 = 2;
-    constexpr static const float a0 = 1;
-    constexpr static const float argsDiff = 1e-13;
+    constexpr static const double a3 = 10;
+    constexpr static const double a2 = 5;
+    constexpr static const double a1 = 2;
+    constexpr static const double a0 = 1;
+    constexpr static const double argsDiff = 1e-13;
 
     template<typename T>
     JET_CUDA_DEVICE_HOST inline
@@ -76,17 +76,18 @@ public:
     void FillData( );
     void Run( );
     void RunAndCompare( );
-    using JetT = ceres::Jet<float , 2>;
+    using ScalarType = double;
+    using JetT = ceres::Jet<ScalarType , 2>;
     using DeriveMatrix = Eigen::Matrix<decltype(std::declval<JetT>().a) , -1 , -1 , Eigen::RowMajor>;
 private:
     DeriveMatrix RunInternalGPUWithSettings( clock_t& gpuDuration ,unsigned int pperThread,unsigned int NumThreadsInBlock );
     DeriveMatrix RunInternalCPU(clock_t& cpuDuration );
     void RunInternalGPU( clock_t& gpuDuration );
     using CudaJetBuffer = ceres::internal::CudaBuffer<JetT>;
-    using CudaFloatBuffer = ceres::internal::CudaBuffer<float>;
+    using CudaFloatBuffer = ceres::internal::CudaBuffer< ScalarType >;
     size_t _points_num;
-    std::unique_ptr<float [ ]> _points;
-    std::unique_ptr<float [ ]> _derives;
+    std::unique_ptr< ScalarType [ ]> _points;
+    std::unique_ptr< ScalarType [ ]> _derives;
     std::unique_ptr<CudaJetBuffer> _pCudaBuffer;
     std::unique_ptr<CudaFloatBuffer> _devPoints;
     std::unique_ptr<CudaFloatBuffer> _devDerives;
