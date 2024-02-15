@@ -117,11 +117,18 @@ void _2_args_cpu( )
     }
 }
 
-void _1_args_gpu( )
+void time_measurement_vector2scalar( )
 {
     ceres::examples::internal::GpuJetHolder holder( 40000 );
     holder.FillData( );
     holder.Run( );
+}
+
+void _2_args_gpu( )
+{
+    ceres::examples::internal::GpuJetHolder holder( 40000 );
+    holder.FillData( );
+    holder.RunAndCompare( );
 }
 
 int main( int argc , char** argv )
@@ -130,6 +137,8 @@ int main( int argc , char** argv )
     google::InitGoogleLogging( argv[ 0 ] );
     //one_arg_cpu( );
     //_2_args_cpu( );
-    _1_args_gpu( );
+    //_1_args_gpu( );
+    time_measurement_vector2scalar( );
+    _2_args_gpu( );
     return 0;
 }

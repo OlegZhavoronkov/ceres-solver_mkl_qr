@@ -75,10 +75,12 @@ public:
     GpuJetHolder& operator=( GpuJetHolder&& ) = default;
     void FillData( );
     void Run( );
+    void RunAndCompare( );
     using JetT = ceres::Jet<float , 2>;
+    using DeriveMatrix = Eigen::Matrix<decltype(std::declval<JetT>().a) , -1 , -1 , Eigen::RowMajor>;
 private:
-    void RunInternalGPUWithSettings( clock_t& gpuDuration ,unsigned int pperThread,unsigned int NumThreadsInBlock );
-    void RunInternalCPU(clock_t& cpuDuration );
+    DeriveMatrix RunInternalGPUWithSettings( clock_t& gpuDuration ,unsigned int pperThread,unsigned int NumThreadsInBlock );
+    DeriveMatrix RunInternalCPU(clock_t& cpuDuration );
     void RunInternalGPU( clock_t& gpuDuration );
     using CudaJetBuffer = ceres::internal::CudaBuffer<JetT>;
     using CudaFloatBuffer = ceres::internal::CudaBuffer<float>;

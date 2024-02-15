@@ -56,9 +56,22 @@ void GpuJetHolder::Run( )
     fmt::print( "cpu {} ms gpu {} ms\n" , whole_duration_cpu , whole_duration_gpu );
 }
 
-void GpuJetHolder::RunInternalCPU( clock_t& cpuDuration )
+void GpuJetHolder::RunAndCompare( )
 {
-    std::unique_ptr<float [ ]> cpu_deriv(new float[2*_points_num]);
+    clock_t this_run_cpu{},this_run_gpu{};
+    DeriveMatrix cpu_derives = RunInternalCPU( this_run_cpu );
+    DeriveMatrix gpu_derives = RunInternalGPUWithSettings( this_run_gpu , 1 , 256 );
+    fmt::print( "cpu_derives {0} {1}\n" , cpu_derives.rows( ) , cpu_derives.cols( ) );
+    for (int i = 0; i < cpu_derives.rows( ) - 1; i += 1000)
+    {
+        fmt::print( "{0} cpu {1} {2} gpu {3} {4}\n" , i , cpu_derives( i , 0 ) , cpu_derives( i , 1 ) , gpu_derives( i , 0 ) , gpu_derives( i , 1 ) );
+    }
+}
+
+GpuJetHolder::DeriveMatrix GpuJetHolder::RunInternalCPU( clock_t& cpuDuration )
+{
+    using scalarType = decltype( std::declval<JetT>( ).a );
+    std::unique_ptr<scalarType [ ]> cpu_deriv(new scalarType[2*_points_num]);
     auto cpu_start = clock( );
     std::vector<JetT> jet_args( _points_num *2);
     std::vector<JetT> jet_res( _points_num );
@@ -77,17 +90,20 @@ void GpuJetHolder::RunInternalCPU( clock_t& cpuDuration )
         cpu_deriv[ 2 * i ] = jet_res[ i ].v[ 0 ];
         cpu_deriv[ 2*i +1] = jet_res[ i ].v[ 1 ];
     }
-    cpuDuration = clock() - cpu_start;
+    cpuDuration = clock( ) - cpu_start;
+    DeriveMatrix ret = DeriveMatrix::Map( cpu_deriv.get( ) , _points_num , 2 ).eval( );
+    return ret;
 }
 
 void GpuJetHolder::RunInternalGPU( clock_t& gpuDuration )
 {
     clock_t min_clock = std::numeric_limits<clock_t>::max( );
+    float min_clock_float = std::numeric_limits<float>::max( );
     int best_time_ppthread;
     int best_time_numThreads;
-    for (int i = 1; i <= 64; i++)
+    for (unsigned int i = 1; i <= 64; i++)
     {
-        for (int numThreads = 32; numThreads <= 1024; numThreads += 8)
+        for (unsigned int numThreads = 32; numThreads <= 1024; numThreads += 8)
         {
             clock_t curr_clock_summ{ 0 };
             unsigned int passes_num = 20;
@@ -97,18 +113,18 @@ void GpuJetHolder::RunInternalGPU( clock_t& gpuDuration )
                 RunInternalGPUWithSettings( curr_clock , i , numThreads );
                 curr_clock_summ += curr_clock;
             }
-            curr_clock_summ = ( clock_t ) ( curr_clock_summ / (1.0*passes_num) );
-            if (min_clock > curr_clock_summ)
+            float curr_mean_clock_summ = ( clock_t ) ( curr_clock_summ / (1.0*passes_num) );
+            if (min_clock_float > curr_mean_clock_summ)
             {
                 best_time_ppthread = i;
                 best_time_numThreads = numThreads;
-                min_clock = curr_clock_summ;
+                min_clock_float = curr_mean_clock_summ;
             }
             //fmt::print( "pperthread {} numThreads {} {} msec\n" ,i,numThreads, ( curr_clock_summ * 1000.0 ) / CLOCKS_PER_SEC );
         }
     }
-    gpuDuration = min_clock;
-    fmt::print( "best time {} msec pperthread {} numThreads {}\n" , ( min_clock * 1000.0 ) / CLOCKS_PER_SEC , best_time_ppthread , best_time_numThreads );
+    gpuDuration = static_cast<clock_t>(min_clock_float);
+    fmt::print( "best time {} msec pperthread {} numThreads {}\n" , ( min_clock_float * 1000.0 ) / CLOCKS_PER_SEC , best_time_ppthread , best_time_numThreads );
 }
 
 }
