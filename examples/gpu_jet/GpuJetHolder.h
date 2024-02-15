@@ -40,9 +40,22 @@ struct VectorScalarCostFunctor
     JET_CUDA_DEVICE_HOST inline
     bool operator()( const T* const x , T* residual ) const
     {
-        residual[ 0 ] = a3 * x[ 0 ] * x[ 0 ] * x[ 0 ] + a2 * x[ 0 ] * x[ 0 ] + a1 * x[ 0 ] + a0 +
-            ( a2 - a3 ) * x[ 1 ] * x[ 1 ] + ( a3 - a1 ) * x[ 1 ] * x[ 1 ] * x[ 0 ] +
-            (a1+a3)*sin(x[0]+x[1])*cos(x[0]);
+        //printf( "functor 1\n" );
+        residual[ 0 ] = a3 * x[ 0 ] * x[ 0 ] * x[ 0 ]
+            + a2 * x[ 0 ] * x[ 0 ]
+            + a1 * x[ 0 ]
+            + a0
+            +( a2 - a3 ) * x[ 1 ] * x[ 1 ]
+            + ( a3 - a1 ) * x[ 1 ] * x[ 1 ] * x[ 0 ]
+            + ( a1 + a3 )
+            * sin(
+                x[ 0 ]
+                + x[ 1 ]
+            )
+            * cos( x[ 0 ] )
+            ;
+//        residual[ 0 ] = a3 * x[ 0 ];
+        //printf( "functor 2\n" );
         return true;
     }
 
@@ -64,7 +77,7 @@ public:
     void Run( );
     using JetT = ceres::Jet<float , 2>;
 private:
-    void RunInternalGPUWithSettings( clock_t& gpuDuration ,unsigned int pperThread,int NumThreadsInBlock );
+    void RunInternalGPUWithSettings( clock_t& gpuDuration ,unsigned int pperThread,unsigned int NumThreadsInBlock );
     void RunInternalCPU(clock_t& cpuDuration );
     void RunInternalGPU( clock_t& gpuDuration );
     using CudaJetBuffer = ceres::internal::CudaBuffer<JetT>;
