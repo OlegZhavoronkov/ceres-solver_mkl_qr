@@ -80,7 +80,7 @@ public:
     using JetT = ceres::Jet<ScalarType , 2>;
     using DeriveMatrix = Eigen::Matrix<decltype(std::declval<JetT>().a) , -1 , -1 , Eigen::RowMajor>;
 private:
-    DeriveMatrix RunInternalGPUWithSettings( clock_t& gpuDuration ,unsigned int pperThread,unsigned int NumThreadsInBlock );
+    void RunInternalGPUWithSettings( clock_t& gpuDuration ,unsigned int pperThread,unsigned int NumThreadsInBlock );
     DeriveMatrix RunInternalCPU(clock_t& cpuDuration );
     void RunInternalGPU( clock_t& gpuDuration );
     using CudaJetBuffer = ceres::internal::CudaBuffer<JetT>;

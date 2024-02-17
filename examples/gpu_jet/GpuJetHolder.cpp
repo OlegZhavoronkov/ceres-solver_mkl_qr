@@ -60,11 +60,18 @@ void GpuJetHolder::RunAndCompare( )
 {
     clock_t this_run_cpu{},this_run_gpu{};
     DeriveMatrix cpu_derives = RunInternalCPU( this_run_cpu );
-    DeriveMatrix gpu_derives = RunInternalGPUWithSettings( this_run_gpu , 1 , 256 );
+    RunInternalGPUWithSettings( this_run_gpu , 1 , 256 );
+    DeriveMatrix gpu_derives = DeriveMatrix::Map( _derives.get( ) , _points_num , 2 );
     fmt::print( "cpu time {0} ms gpu time {1} ms\n" , this_run_cpu*1000.0/CLOCKS_PER_SEC,this_run_gpu*1000.0/CLOCKS_PER_SEC );
-    for (int i = 0; i < cpu_derives.rows( ) - 1; i += 1000)
+    for (int i = 0; i < cpu_derives.rows( ) - 1; i += 1)
     {
-        fmt::print( "{0} cpu {1} {2} gpu {3} {4}\n" , i , cpu_derives( i , 0 ) , cpu_derives( i , 1 ) , gpu_derives( i , 0 ) , gpu_derives( i , 1 ) );
+        auto cpu_row = cpu_derives.row( i );
+        auto gpu_row = gpu_derives.row( i );
+        if (( cpu_row - gpu_row ).eval().norm( ) > 1e-6)
+        {
+            fmt::print( "{0} cpu {1} {2} gpu {3} {4}\n" , i , cpu_derives( i , 0 ) , cpu_derives( i , 1 ) , gpu_derives( i , 0 ) , gpu_derives( i , 1 ) );
+        }
+        
     }
 }
 
@@ -101,12 +108,12 @@ void GpuJetHolder::RunInternalGPU( clock_t& gpuDuration )
     float min_clock_float = std::numeric_limits<float>::max( );
     int best_time_ppthread;
     int best_time_numThreads;
-    for (unsigned int i = 1; i <= 64; i++)
+    for (unsigned int i = 1; i <= 64; i+= (i<2 ? 1 : 2))
     {
         for (unsigned int numThreads = 32; numThreads <= 1024; numThreads += 8)
         {
             clock_t curr_clock_summ{ 0 };
-            unsigned int passes_num = 20;
+            unsigned int passes_num = 500;
             for (unsigned int j = 0; j < passes_num; j++)
             {
                 clock_t curr_clock;
@@ -120,6 +127,7 @@ void GpuJetHolder::RunInternalGPU( clock_t& gpuDuration )
                 best_time_numThreads = numThreads;
                 min_clock_float = curr_mean_clock_summ;
             }
+            fmt::print( "pperthread {0} numThreads {1} time for {2} passes {3} msec\n" , i , numThreads,passes_num,(curr_mean_clock_summ*1000.0)/CLOCKS_PER_SEC );
             //fmt::print( "pperthread {} numThreads {} {} msec\n" ,i,numThreads, ( curr_clock_summ * 1000.0 ) / CLOCKS_PER_SEC );
         }
     }

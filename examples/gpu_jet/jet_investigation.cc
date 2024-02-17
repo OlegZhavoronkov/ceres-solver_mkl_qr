@@ -119,14 +119,14 @@ void _2_args_cpu( )
 
 void time_measurement_vector2scalar( )
 {
-    ceres::examples::internal::GpuJetHolder holder( 40000 );
+    ceres::examples::internal::GpuJetHolder holder( 5000 );
     holder.FillData( );
     holder.Run( );
 }
 
 void _2_args_gpu( )
 {
-    ceres::examples::internal::GpuJetHolder holder( 40000 );
+    ceres::examples::internal::GpuJetHolder holder( 10000 );
     holder.FillData( );
     holder.RunAndCompare( );
 }

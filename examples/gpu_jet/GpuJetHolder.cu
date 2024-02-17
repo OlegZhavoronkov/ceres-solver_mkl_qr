@@ -34,7 +34,7 @@ __global__ void Kernel( const GpuJetHolder::ScalarType* pData , GpuJetHolder::Sc
     
 }
 
-GpuJetHolder::DeriveMatrix GpuJetHolder::RunInternalGPUWithSettings(clock_t& gpu_dur,unsigned int pperthread,unsigned int NumThreadsInBlock)
+void GpuJetHolder::RunInternalGPUWithSettings(clock_t& gpu_dur,unsigned int pperthread,unsigned int NumThreadsInBlock)
 {
     memset( _derives.get( ) , 0 , _points_num * sizeof( decltype( std::declval<JetT>( ).a ) ) * 2 );
     auto gpu_start = clock( );
@@ -49,7 +49,7 @@ GpuJetHolder::DeriveMatrix GpuJetHolder::RunInternalGPUWithSettings(clock_t& gpu
     }
     _devDerives->CopyToCpu( _derives.get( ) , _devDerives->size( ) );
     gpu_dur = clock( ) - gpu_start;
-    return DeriveMatrix::Map( _derives.get( ) , _points_num , 2 ).eval( );
+    //return DeriveMatrix::Map( _derives.get( ) , _points_num , 2 ).eval( );
     //for (size_t i = 0; i < _points_num; i++)
     //{
     //    float analytical = ScalarScalarCostFunctor::analyticalDeriv( _points[ 2 * i ] );
