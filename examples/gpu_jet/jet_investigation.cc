@@ -131,6 +131,13 @@ void _2_args_gpu( )
     holder.RunAndCompare( );
 }
 
+void _2_args_2res_cpu( )
+{
+    ceres::examples::internal::GpuJetHolder holder( 10000 );
+    holder.FillData( );
+    holder.RunVector2VectorCPU( );
+}
+
 int main( int argc , char** argv )
 {
     GFLAGS_NAMESPACE::ParseCommandLineFlags( &argc , &argv , true );

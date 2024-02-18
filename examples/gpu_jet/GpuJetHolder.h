@@ -61,6 +61,24 @@ struct VectorScalarCostFunctor
 
 };
 
+struct VectorToVectorCostFunctor
+{
+    constexpr static const double r = 10;
+    constexpr static const double a = 0.5;
+
+    template<typename T>
+    JET_CUDA_DEVICE_HOST inline
+    bool operator()( const T* const x , T* residual ) const
+    {
+        //[x,y]-> ((x-cx)-r)^2 + ((y-cy)-r)^2
+        residual[ 0 ] = x[ 0 ] * x[ 0 ] + sin( x[ 1 ] - a * x[ 0 ] );
+        residual[ 1 ] = x[ 1 ] * x[ 0 ] + cos( x[ 1 ] - a * x[ 0 ] );
+//        residual[ 0 ] = a3 * x[ 0 ];
+        //printf( "functor 2\n" );
+        return true;
+    }
+
+};
 
 class GpuJetHolder
 {
@@ -78,7 +96,9 @@ public:
     void RunAndCompare( );
     using ScalarType = double;
     using JetT = ceres::Jet<ScalarType , 2>;
-    using DeriveMatrix = Eigen::Matrix<decltype(std::declval<JetT>().a) , -1 , -1 , Eigen::RowMajor>;
+    using DeriveMatrix = Eigen::Matrix<decltype( std::declval<JetT>( ).a ) , -1 , -1 , Eigen::RowMajor>;
+
+    void RunVector2VectorCPU( );
 private:
     void RunInternalGPUWithSettings( clock_t& gpuDuration ,unsigned int pperThread,unsigned int NumThreadsInBlock );
     DeriveMatrix RunInternalCPU(clock_t& cpuDuration );

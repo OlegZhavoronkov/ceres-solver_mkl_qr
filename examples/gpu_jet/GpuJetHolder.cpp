@@ -1,5 +1,9 @@
 #include "GpuJetHolder.h"
 #include <fmt/format.h>
+#include "ceres/autodiff_cost_function.h"
+
+using ceres::AutoDiffCostFunction;
+using ceres::CostFunction;
 namespace ceres::examples::internal
 {
 namespace
@@ -100,6 +104,54 @@ GpuJetHolder::DeriveMatrix GpuJetHolder::RunInternalCPU( clock_t& cpuDuration )
     cpuDuration = clock( ) - cpu_start;
     DeriveMatrix ret = DeriveMatrix::Map( cpu_deriv.get( ) , _points_num , 2 ).eval( );
     return ret;
+}
+
+void UsingCeresFunctionForDebug( GpuJetHolder::ScalarType* pData , size_t pointsNum )
+{
+    struct LocalFunctor :public VectorToVectorCostFunctor
+    {
+        LocalFunctor( GpuJetHolder::ScalarType x_ , GpuJetHolder::ScalarType y_ )
+            : x(x_),y(y_)
+        { }
+        double x , y;
+    };
+    std::vector<LocalFunctor> localFunctors;
+    localFunctors.reserve( pointsNum );
+    for (size_t i = 0; i < pointsNum; i++)
+    {
+        localFunctors.push_back( LocalFunctor( pData[ 2 * i ] , pData[ 2 * i + 1 ] ) );
+    }
+    std::unique_ptr<GpuJetHolder::ScalarType [ ]> costFunctionsResiduals( new GpuJetHolder::ScalarType[ 4 * pointsNum ] );
+    memset( costFunctionsResiduals.get( ) , 0 , pointsNum * 4 * sizeof( GpuJetHolder::ScalarType ) );
+    std::unique_ptr<VectorToVectorCostFunctor> pFunctorCPU( new VectorToVectorCostFunctor( ) );
+    std::unique_ptr<CostFunction> pCostFunction( new AutoDiffCostFunction<VectorToVectorCostFunctor , 2 , 2>( &localFunctors[0], ceres::Ownership::DO_NOT_TAKE_OWNERSHIP ) );
+    pCostFunction->Evaluate()
+}
+
+void GpuJetHolder::RunVector2VectorCPU( )
+{
+    using scalarType = decltype( std::declval<JetT>( ).a );
+    
+
+    std::unique_ptr<scalarType [ ]> cpu_deriv( new scalarType[ 2 * _points_num ] );
+    auto cpu_start = clock( );
+    std::vector<JetT> jet_args( _points_num *2);
+    std::vector<JetT> jet_res( _points_num*2 );
+    for (size_t i = 0; i < _points_num; i++)
+    {
+        jet_args[ 2 * i ] = JetT( _points[ i * 2 ] , 0 );
+        jet_args[ 2 * i + 1 ] = JetT( _points[ i * 2 + 1 ] , 1 );
+    }
+    VectorToVectorCostFunctor cf;
+    for (size_t i = 0; i < _points_num; i++)
+    {
+        cf( &jet_args[ 2*i ] , &jet_res[2*i] );
+    }
+    for (size_t i = 0; i < _points_num; i++)
+    {
+        cpu_deriv[ 2 * i ] = jet_res[ i ].v[ 0 ];
+        cpu_deriv[ 2*i +1] = jet_res[ i ].v[ 1 ];
+    }
 }
 
 void GpuJetHolder::RunInternalGPU( clock_t& gpuDuration )
