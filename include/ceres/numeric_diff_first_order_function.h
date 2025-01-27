@@ -36,10 +36,10 @@
 #include <type_traits>
 #include <utility>
 
+#include "absl/container/fixed_array.h"
 #include "absl/log/check.h"
 #include "ceres/first_order_function.h"
 #include "ceres/internal/eigen.h"
-#include "ceres/internal/fixed_array.h"
 #include "ceres/internal/numeric_diff.h"
 #include "ceres/internal/parameter_dims.h"
 #include "ceres/internal/variadic_evaluate.h"
@@ -187,7 +187,7 @@ class NumericDiffFirstOrderFunction final : public FirstOrderFunction {
   bool Evaluate(const double* const parameters,
                 double* cost,
                 double* gradient) const override {
-    // Get the function value (cost) at the the point to evaluate.
+    // Get the function value (cost) at the point to evaluate.
     if (!(*functor_)(parameters, cost)) {
       return false;
     }
@@ -197,7 +197,7 @@ class NumericDiffFirstOrderFunction final : public FirstOrderFunction {
     }
 
     // Create a copy of the parameters which will get mutated.
-    internal::FixedArray<double, 32> parameters_copy(num_parameters_);
+    absl::FixedArray<double> parameters_copy(num_parameters_);
     std::copy_n(parameters, num_parameters_, parameters_copy.data());
     double* parameters_ptr = parameters_copy.data();
     constexpr int kNumResiduals = 1;
