@@ -36,11 +36,11 @@
 #include <cstdint>
 #include <iterator>
 #include <memory>
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "absl/container/btree_map.h"
 #include "absl/container/fixed_array.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -87,7 +87,7 @@ void CheckForNoAliasing(double* existing_block,
 
 template <typename KeyType>
 void DecrementValueOrDeleteKey(const KeyType key,
-                               std::map<KeyType, int>* container) {
+                               absl::btree_map<KeyType, int>* container) {
   auto it = container->find(key);
   if (it->second == 1) {
     delete key;
