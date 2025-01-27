@@ -1,5 +1,5 @@
 # Ceres Solver - A fast non-linear least squares minimizer
-# Copyright 2023 Google Inc. All rights reserved.
+# Copyright 2024 Google Inc. All rights reserved.
 # http://ceres-solver.org/
 #
 # Redistribution and use in source and binary forms, with or without
@@ -29,28 +29,7 @@
 # Authors: keir@google.com (Keir Mierle)
 #          alexs.mac@gmail.com (Alex Stewart)
 
-cmake_minimum_required(VERSION 3.16...3.27)
-
-# On macOS, add the Homebrew prefix (with appropriate suffixes) to the
-# respective HINTS directories (after any user-specified locations).  This
-# handles Homebrew installations into non-standard locations (not /usr/local).
-# We do not use CMAKE_PREFIX_PATH for this as given the search ordering of
-# find_xxx(), doing so would override any user-specified HINTS locations with
-# the Homebrew version if it exists.
-if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
-  find_program(HOMEBREW_EXECUTABLE brew)
-  mark_as_advanced(FORCE HOMEBREW_EXECUTABLE)
-  if (HOMEBREW_EXECUTABLE)
-    # Detected a Homebrew install, query for its install prefix.
-    execute_process(COMMAND ${HOMEBREW_EXECUTABLE} --prefix
-      OUTPUT_VARIABLE HOMEBREW_INSTALL_PREFIX
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    message(STATUS "Detected Homebrew with install prefix: "
-      "${HOMEBREW_INSTALL_PREFIX}, adding to CMake search paths.")
-    list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_INSTALL_PREFIX}")
-  endif()
-endif()
-
+cmake_minimum_required(VERSION 3.16...3.29)
 project(Ceres C CXX)
 
 # NOTE: The following CMake variables must be applied consistently to all
@@ -126,7 +105,7 @@ if (APPLE)
 endif()
 # We can't have an option called 'CUDA' since that is a reserved word -- a
 # language definition.
-option(USE_CUDA "Enable use of CUDA linear algebra solvers." ON)
+set(USE_CUDA "default" CACHE STRING "Enable use of CUDA linear algebra solvers.")
 option(LAPACK "Enable use of LAPACK directly within Ceres." ON)
 # Template specializations for the Schur complement based solvers. If
 # compile time, binary size or compiler performance is an issue, you
@@ -204,6 +183,12 @@ if (Eigen3_FOUND)
   endif (EIGENSPARSE)
 endif (Eigen3_FOUND)
 
+if (CMAKE_VERSION VERSION_LESS 3.17)
+  set_property(CACHE USE_CUDA PROPERTY STRINGS OFF default)
+else (CMAKE_VERSION VERSION_LESS 3.17)
+  set_property(CACHE USE_CUDA PROPERTY STRINGS OFF default static)
+endif (CMAKE_VERSION VERSION_LESS 3.17)
+
 if (USE_CUDA)
   if (CMAKE_VERSION VERSION_LESS 3.17)
     # On older versions of CMake (20.04 default is 3.16) FindCUDAToolkit was
@@ -233,6 +218,7 @@ if (USE_CUDA)
       declare_imported_cuda_target(cusparse)
       declare_imported_cuda_target(cudart ${CUDA_LIBRARIES})
 
+      set(CERES_CUDA_TARGET_SUFFIX "")
       set(CUDAToolkit_BIN_DIR ${CUDA_TOOLKIT_ROOT_DIR}/bin)
 
     else (CUDA_FOUND)
@@ -248,26 +234,56 @@ if (USE_CUDA)
         "find_dependency(CUDAToolkit ${CUDAToolkit_VERSION})")
       enable_language(CUDA)
       if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
-        # Support Maxwell, Pascal, Volta, Turing, and Ampere GPUs.
-        set(CMAKE_CUDA_ARCHITECTURES "50;60;70;80")
+        # Support Maxwell GPUs (Default).
+        set(CMAKE_CUDA_ARCHITECTURES "50")
+        # Support other architectures depending on CUDA toolkit version.
+        if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "8.0")
+          # Support Pascal GPUs.
+          list(APPEND CMAKE_CUDA_ARCHITECTURES "60")
+        endif(CUDAToolkit_VERSION VERSION_GREATER_EQUAL "8.0")
+        if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "9.0")
+          # Support Volta GPUs.
+          list(APPEND CMAKE_CUDA_ARCHITECTURES "70")
+        endif(CUDAToolkit_VERSION VERSION_GREATER_EQUAL "9.0")
+        if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "10.0")
+          # Support Turing  GPUs.
+          list(APPEND CMAKE_CUDA_ARCHITECTURES "75")
+        endif(CUDAToolkit_VERSION VERSION_GREATER_EQUAL "10.0")
+        if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "11.0")
+          # Support Ampere GPUs.
+          list(APPEND CMAKE_CUDA_ARCHITECTURES "80")
+        endif(CUDAToolkit_VERSION VERSION_GREATER_EQUAL "11.0")
+        if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "11.8")
+          # Support Hopper GPUs.
+          list(APPEND CMAKE_CUDA_ARCHITECTURES "90")
+        endif(CUDAToolkit_VERSION VERSION_GREATER_EQUAL "11.8")
         message("-- Setting CUDA Architecture to ${CMAKE_CUDA_ARCHITECTURES}")
       endif()
-      list(APPEND CERES_CUDA_LIBRARIES
-        CUDA::cublas
-        CUDA::cudart
-        CUDA::cusolver
-        CUDA::cusparse)
-      set(CMAKE_CUDA_RUNTIME_LIBRARY NONE)
+
+      if (USE_CUDA STREQUAL "static")
+        set(CERES_CUDA_TARGET_SUFFIX "_static")
+      else (USE_CUDA STREQUAL "static")
+        set(CERES_CUDA_TARGET_SUFFIX "")
+      endif (USE_CUDA STREQUAL "static")
     else (CUDAToolkit_FOUND)
       message("-- Did not find CUDA, disabling CUDA support.")
       update_cache_variable(USE_CUDA OFF)
     endif (CUDAToolkit_FOUND)
   endif (CMAKE_VERSION VERSION_LESS 3.17)
 endif (USE_CUDA)
-if (NOT USE_CUDA)
+
+if (USE_CUDA)
+  list(APPEND CERES_CUDA_LIBRARIES
+    CUDA::cublas${CERES_CUDA_TARGET_SUFFIX}
+    CUDA::cudart${CERES_CUDA_TARGET_SUFFIX}
+    CUDA::cusolver${CERES_CUDA_TARGET_SUFFIX}
+    CUDA::cusparse${CERES_CUDA_TARGET_SUFFIX})
+  unset (CERES_CUDA_TARGET_SUFFIX)
+  set(CMAKE_CUDA_RUNTIME_LIBRARY NONE)
+else (USE_CUDA)
   message("-- Building without CUDA.")
   list(APPEND CERES_COMPILE_OPTIONS CERES_NO_CUDA)
-endif (NOT USE_CUDA)
+endif (USE_CUDA)
 
 if (LAPACK)
   find_package(LAPACK QUIET)
