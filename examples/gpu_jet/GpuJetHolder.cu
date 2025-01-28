@@ -41,7 +41,7 @@ void GpuJetHolder::RunInternalGPUWithSettings(clock_t& gpu_dur,unsigned int pper
     _devPoints->CopyFromCpu( _points.get( ) , 2 * _points_num );
     const int NumBlocks = ( _points_num / (NumThreadsInBlock*pperthread) ) + (_points_num % (NumThreadsInBlock*pperthread) == 0 ? 0 : 1);
     Kernel << <NumBlocks , NumThreadsInBlock >> > ( _devPoints->data( ) , _devDerives->data( ) , _points_num,_pCudaBuffer->data(),pperthread,VectorScalarCostFunctor() );
-    auto res = ::cudaThreadSynchronize( );
+    auto res = ::cudaDeviceSynchronize( );
     if (res != cudaError_t::cudaSuccess)
     {
         auto err_str = fmt::format( "error {} \"{}\"" , res , ::cudaGetErrorString( res ) );

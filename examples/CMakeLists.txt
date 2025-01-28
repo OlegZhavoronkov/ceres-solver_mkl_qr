@@ -67,7 +67,7 @@ add_executable(robust_curve_fitting robust_curve_fitting.cc)
 target_link_libraries(robust_curve_fitting PRIVATE absl::log_initialize Ceres::ceres SuiteSparse::CHOLMOD)
 
 add_executable(simple_bundle_adjuster simple_bundle_adjuster.cc)
-target_link_libraries(simple_bundle_adjuster PRIVATE absl::log_initialize absl::time Ceres::ceresSuiteSparse::CHOLMOD )
+target_link_libraries(simple_bundle_adjuster PRIVATE absl::log_initialize absl::time Ceres::ceres SuiteSparse::CHOLMOD )
 
 add_executable(bicubic_interpolation bicubic_interpolation.cc)
 target_link_libraries(bicubic_interpolation PRIVATE absl::log_initialize Ceres::ceres SuiteSparse::CHOLMOD)
@@ -83,7 +83,8 @@ target_link_libraries(evaluation_callback_example PRIVATE absl::log_initialize C
 
 add_executable(jet_investigation gpu_jet/jet_investigation.cc gpu_jet/GpuJetHolder.h gpu_jet/GpuJetHolder.cpp gpu_jet/GpuJetHolder.cu)
 #target_include_directories(jet_investigation PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../internal)
-target_link_libraries(jet_investigation PRIVATE Ceres::ceres fmt cudart ceres_internal SuiteSparse::CHOLMOD SuiteSparse::SPQR cublas cusolver cusparse)
+target_link_libraries(jet_investigation PRIVATE Ceres::ceres fmt::fmt cudart ceres_internal SuiteSparse::CHOLMOD SuiteSparse::SPQR cublas cusolver cusparse
+absl::log_initialize absl::flags absl::flags_parse)
 
 
 add_executable(powell powell.cc)

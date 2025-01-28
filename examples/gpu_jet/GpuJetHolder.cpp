@@ -125,7 +125,7 @@ void UsingCeresFunctionForDebug( GpuJetHolder::ScalarType* pData , size_t points
     memset( costFunctionsResiduals.get( ) , 0 , pointsNum * 4 * sizeof( GpuJetHolder::ScalarType ) );
     std::unique_ptr<VectorToVectorCostFunctor> pFunctorCPU( new VectorToVectorCostFunctor( ) );
     std::unique_ptr<CostFunction> pCostFunction( new AutoDiffCostFunction<VectorToVectorCostFunctor , 2 , 2>( &localFunctors[0], ceres::Ownership::DO_NOT_TAKE_OWNERSHIP ) );
-    pCostFunction->Evaluate()
+    //pCostFunction->Evaluate()
 }
 
 void GpuJetHolder::RunVector2VectorCPU( )
