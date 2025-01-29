@@ -127,4 +127,4 @@ target_link_libraries(denoising PRIVATE absl::log_initialize absl::flags absl::f
 
 add_subdirectory(sampled_function)
 add_subdirectory(slam)
-#add_subdirectory(opencl)
+add_subdirectory(opencl)
