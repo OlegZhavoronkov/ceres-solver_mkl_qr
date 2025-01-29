@@ -1,5 +1,9 @@
 #include "ceres/ceres.h"
-#include "glog/logging.h"
+#include <absl/log/log.h>
+#include <absl/log/initialize.h>
+//#include <absl/log/flags.h>
+#include "absl/flags/flag.h"
+#include "absl/flags/parse.h"
 #include <fmt/format.h>
 #include "ceres/jet.h"
 #include <array>
@@ -140,8 +144,11 @@ void _2_args_2res_cpu( )
 
 int main( int argc , char** argv )
 {
-    GFLAGS_NAMESPACE::ParseCommandLineFlags( &argc , &argv , true );
-    google::InitGoogleLogging( argv[ 0 ] );
+    //GFLAGS_NAMESPACE::ParseCommandLineFlags( &argc , &argv , true );
+    absl::ParseCommandLine(argc, argv);
+    //absl::ParseFlag( &argc , &argv , true );
+    absl::InitializeLog( );
+    //google::InitGoogleLogging( argv[ 0 ] );
     //one_arg_cpu( );
     //_2_args_cpu( );
     //_1_args_gpu( );
