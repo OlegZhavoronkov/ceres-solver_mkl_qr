@@ -45,7 +45,7 @@ void quadric_pass( )
 }
 
 template<typename T> using TracedEigenVector = Eigen::Matrix< OpenCLGraphNode< T > , 3 , 1>;
-
+template<typename T> using TracedEigenMatrix = Eigen::Matrix< OpenCLGraphNode< T > , 3 , 3 , Eigen::RowMajor>;
 void check_eigen_ctors()
 {
     OpenCLGraph graph;
@@ -62,10 +62,21 @@ void quadric_EigenPass( )
     
     //OpenCLGraphNode<double>
     //ScalarCostFunctor_quadric func = {};
-    OpenCLGraph graph;
-    std::array<OpenCLGraphNode<double>,3  > arr( { OpenCLGraphNode<double>{&graph,0},OpenCLGraphNode<double>{&graph,0},OpenCLGraphNode<double>{&graph,0} } );
-    TracedEigenVector<double> vec = TracedEigenVector<double>::Map( arr.data( ) );
-    auto res = vec.dot( vec );
+    {
+        OpenCLGraph graph;
+        std::array<OpenCLGraphNode<double> , 3  > arr( { OpenCLGraphNode<double>{&graph,0},OpenCLGraphNode<double>{&graph,0},OpenCLGraphNode<double>{&graph,0} } );
+        TracedEigenVector<double> vec = TracedEigenVector<double>::Map( arr.data( ) );
+    }
+    {
+        OpenCLGraph graph;
+        std::array<OpenCLGraphNode<double> , 9  > arr_intrinsics( { OpenCLGraphNode<double>{&graph,300},OpenCLGraphNode<double>{&graph,0},OpenCLGraphNode<double>{&graph,150},
+                                                                        OpenCLGraphNode<double>{&graph,0},OpenCLGraphNode<double>{&graph,300},OpenCLGraphNode<double>{&graph,150},
+                                                                        OpenCLGraphNode<double>{&graph,0},OpenCLGraphNode<double>{&graph,0},OpenCLGraphNode<double>{&graph,1}
+         } );
+        TracedEigenMatrix<double> intrinsics = TracedEigenMatrix<double>::Map( arr_intrinsics.data( ) );
+        auto rev_intrinsics = intrinsics.inverse( ).eval( );
+    }
+    //auto reversed = vec.dot( vec );
 }
 
 int main( int argc , char** argv )
