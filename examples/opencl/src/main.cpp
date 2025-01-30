@@ -91,21 +91,28 @@ void jet_tryout( )
     using JetElem = TracedJetElem<double , 1>;
     OpenCLGraph graph;
     OneDimTracedJet argjet1( JetElem(&graph),0 );
-    OneDimTracedJet argjet2( JetElem(&graph),0 );
-    OneDimTracedJet argjet3( JetElem(&graph),0 );
+    //OneDimTracedJet argjet2( JetElem(&graph),0 );
+    //OneDimTracedJet argjet3( JetElem(&graph),0 );
     OneDimTracedJet resjet( JetElem(&graph),0 );
-    ( void ) ( argjet1 + argjet2 );
-    ( void ) ( argjet2 * argjet3 );
-    ( void ) ( 20.0 * argjet3 );
-    ( void ) ( 20.0 + argjet3 );
-    ( void ) ( 20.0 - argjet3 );
-    ( void ) ( argjet3 -20.0);
-    ( void ) ( 20.0 / argjet3 );
-    ( void ) ( argjet3 / 20.0 );
-    ( void ) ( argjet3 / argjet3);
-    argjet2 /= 10.0;
-    //ScalarCostFunctor_quadric scf;
-    //scf( &argjet , &resjet );
+    //( void ) ( argjet1 + argjet2 );
+    //( void ) ( argjet2 * argjet3 );
+    //( void ) ( 20.0 * argjet3 );
+    //( void ) ( 20.0 + argjet3 );
+    //( void ) ( 20.0 - argjet3 );
+    //( void ) ( argjet3 -20.0);
+    //( void ) ( 20.0 / argjet3 );
+    //( void ) ( argjet3 / 20.0 );
+    //( void ) ( argjet3 / argjet3);
+    //argjet2 /= 10.0;
+    ScalarCostFunctor_quadric scf;
+    scf( &argjet1 , &resjet );
+}
+
+void elementary_functions( )
+{
+    OpenCLGraph graph;
+    OpenCLGraphNode<double> node1( &graph ) , node2( &graph ) , node3( &graph );
+    abs( node1 );
 }
 
 int main( int argc , char** argv )
@@ -117,6 +124,7 @@ int main( int argc , char** argv )
 //    quadric_pass( );
     //quadric_EigenPass( );
     //check_eigen_ctors( );
-    jet_tryout( );
+    //jet_tryout( );
+    elementary_functions( );
     return 0;
 }
