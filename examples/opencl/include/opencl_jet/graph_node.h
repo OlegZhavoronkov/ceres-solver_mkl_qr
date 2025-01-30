@@ -3,6 +3,7 @@
 #include <fmt/ostream.h>
 #include <opencl_jet/graph.h>
 #include <type_traits>
+#include <ceres/jet.h>
 namespace opencl_jet
 {
 
@@ -165,15 +166,15 @@ public:
         return *this;
     }
     //unary +
-    const ThisType&  operator+( const ThisType& t )
+    const ThisType&  operator+( const ThisType& t )const
     {
         return t;
     }
     //unary -
-    ThisType  operator-( const ThisType& t )
+    ThisType  operator-( /*const ThisType& t*/ )const
     {
-        auto ret = ThisType( t._pGraph , -t._val );
-        MakeUnaryPrefixExpression( t , "-" );
+        auto ret = ThisType( _pGraph , -_val );
+        ret.MakeUnaryPrefixExpression( *this , "-" );
         return ret;
     }
 public:
@@ -234,7 +235,7 @@ private:
 
     template<typename T> std::string MakeBinaryExpression(  const ThisType& op_l ,const T& op_r  ,const std::string& ops )
     {
-        auto str = fmt::format( "dd[{0}]= {1} {2} dd[{3}]" , _graphIdx , op_l._graphIdx ,ops,op_r);
+        auto str = fmt::format( "dd[{0}]= dd[{1}] {2} {3}" , _graphIdx , op_l._graphIdx ,ops,op_r);
         fmt::print( "{0}\n" , str );
         return str;
     }
@@ -252,7 +253,7 @@ OpenCLGraphNode<T> operator+( const OpenCLGraphNode<T>& f , const OpenCLGraphNod
 
 // Binary + with a scalar: x + s
 template <typename T >
-OpenCLGraphNode<T> operator+( const OpenCLGraphNode<T>& f , T s )
+OpenCLGraphNode<T> operator+( const OpenCLGraphNode<T>& f ,const T& s )
 {
     OpenCLGraphNode<T> ret( f._pGraph , f._val + s );
     ret.MakeBinaryExpression( f , s , "+" );
@@ -261,7 +262,7 @@ OpenCLGraphNode<T> operator+( const OpenCLGraphNode<T>& f , T s )
 
 // Binary + with a scalar: s + x
 template <typename T >
-OpenCLGraphNode<T> operator+( T s , const OpenCLGraphNode<T>& f )
+OpenCLGraphNode<T> operator+(const T& s , const OpenCLGraphNode<T>& f )
 {
     OpenCLGraphNode<T> ret( f._pGraph , f._val + s );
     ret.MakeBinaryExpression( s , f , "+" );
@@ -279,7 +280,7 @@ OpenCLGraphNode<T> operator-( const OpenCLGraphNode<T>& f , const OpenCLGraphNod
 
 // Binary + with a scalar: x + s
 template <typename T >
-OpenCLGraphNode<T> operator-( const OpenCLGraphNode<T>& f , T s )
+OpenCLGraphNode<T> operator-( const OpenCLGraphNode<T>& f ,const T& s )
 {
     OpenCLGraphNode<T> ret( f._pGraph , f._val - s );
     ret.MakeBinaryExpression( f , s , "-" );
@@ -288,7 +289,7 @@ OpenCLGraphNode<T> operator-( const OpenCLGraphNode<T>& f , T s )
 
 // Binary + with a scalar: s + x
 template <typename T >
-OpenCLGraphNode<T> operator-( T s , const OpenCLGraphNode<T>& f )
+OpenCLGraphNode<T> operator-(const T& s , const OpenCLGraphNode<T>& f )
 {
     OpenCLGraphNode<T> ret( f._pGraph , s - f._val );
     ret.MakeBinaryExpression( s , f , "-" );
@@ -306,7 +307,7 @@ OpenCLGraphNode<T> operator*( const OpenCLGraphNode<T>& f , const OpenCLGraphNod
 
 // Binary + with a scalar: x + s
 template <typename T >
-OpenCLGraphNode<T> operator*( const OpenCLGraphNode<T>& f , T s )
+OpenCLGraphNode<T> operator*( const OpenCLGraphNode<T>& f , const T& s )
 {
     OpenCLGraphNode<T> ret( f._pGraph , f._val * s );
     ret.MakeBinaryExpression( f , s , "*" );
@@ -322,6 +323,8 @@ OpenCLGraphNode<T> operator*( const T& s , const OpenCLGraphNode<T>& f )
     return ret;
 }
 
+
+
 template <typename T >
 OpenCLGraphNode<T> operator/( const OpenCLGraphNode<T>& f , const OpenCLGraphNode<T>& g )
 {
@@ -333,7 +336,7 @@ OpenCLGraphNode<T> operator/( const OpenCLGraphNode<T>& f , const OpenCLGraphNod
 
 // Binary + with a scalar: x + s
 template <typename T >
-OpenCLGraphNode<T> operator/( const OpenCLGraphNode<T>& f , T s )
+OpenCLGraphNode<T> operator/( const OpenCLGraphNode<T>& f ,const T& s )
 {
     OpenCLGraphNode<T> ret( f._pGraph , f._val / s );
     ret.MakeBinaryExpression( f , s , "/" );
@@ -342,12 +345,71 @@ OpenCLGraphNode<T> operator/( const OpenCLGraphNode<T>& f , T s )
 
 // Binary + with a scalar: s + x
 template <typename T >
-OpenCLGraphNode<T> operator/( T s , const OpenCLGraphNode<T>& f )
+OpenCLGraphNode<T> operator/(const T& s , const OpenCLGraphNode<T>& f )
 {
     OpenCLGraphNode<T> ret( f._pGraph , s / f._val );
     ret.MakeBinaryExpression( s , f , "/" );
     return ret;
 }
 
+template<typename T , int Dimension> using TracedJet = ceres::Jet< OpenCLGraphNode<T> , Dimension >;
+template<typename T , int Dimension> using TracedJetElem = typename TracedJet<T , Dimension>::Scalar;
+
+
+template <typename T , int N>
+inline TracedJet<T,N> operator*( const TracedJet<T,N>& f , T s )
+{
+    return  TracedJet<T,N>(f.a * s, f.v * s);
+}
+
+
+template <typename T , int N>
+inline TracedJet<T,N> operator*( T s , const TracedJet<T,N>& f )
+{
+    return TracedJet<T,N>(f.a * s, f.v * s);
+}
+
+
+template <typename T , int N>
+inline TracedJet<T,N> operator+( const TracedJet<T,N>& f , T s )
+{
+    return TracedJet<T,N>(f.a + s, f.v);
+}
+
+// Binary + with a scalar: s + x
+template <typename T , int N>
+inline TracedJet<T , N> operator+( T s , const TracedJet<T , N>& f )
+{
+    return TracedJet<T , N>( f.a + s , f.v );
+}
+
+template <typename T , int N>
+inline TracedJet<T , N> operator-( const TracedJet<T , N>& f , T s )
+{
+    return TracedJet<T, N>(f.a - s, f.v);
+}
+
+// Binary - with a scalar: s - x
+template <typename T , int N>
+inline TracedJet<T , N> operator-( T s , const TracedJet<T , N>& f )
+{
+    return TracedJet<T, N>(s - f.a, -f.v);
+}
+
+// Binary / with a scalar: s / x
+template <typename T , int N>
+inline  TracedJet<T , N> operator/( T s , const TracedJet<T , N>& g )
+{
+    const  auto minus_s_g_a_inverse2 = -s / (g.a * g.a);
+    return TracedJet<T, N>(s / g.a, g.v * minus_s_g_a_inverse2);
+}
+
+// Binary / with a scalar: x / s
+template <typename T , int N>
+inline TracedJet<T , N> operator/( const TracedJet<T , N>& f , T s )
+{
+    const T s_inverse = T(1.0) / s;
+    return TracedJet<T, N>(f.a * s_inverse, f.v * s_inverse);
+}
 
 }

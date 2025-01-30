@@ -6,6 +6,8 @@
 #include <Eigen/Dense>
 #include <opencl_jet/graph_node.h>
 #include <array>
+#include "ceres/ceres.h"
+#include "ceres/jet.h"
 using namespace opencl_jet;
 
 constexpr const double a3 = 10;
@@ -79,6 +81,33 @@ void quadric_EigenPass( )
     //auto reversed = vec.dot( vec );
 }
 
+
+
+
+
+void jet_tryout( )
+{
+    using OneDimTracedJet = TracedJet<double , 1>;
+    using JetElem = TracedJetElem<double , 1>;
+    OpenCLGraph graph;
+    OneDimTracedJet argjet1( JetElem(&graph),0 );
+    OneDimTracedJet argjet2( JetElem(&graph),0 );
+    OneDimTracedJet argjet3( JetElem(&graph),0 );
+    OneDimTracedJet resjet( JetElem(&graph),0 );
+    ( void ) ( argjet1 + argjet2 );
+    ( void ) ( argjet2 * argjet3 );
+    ( void ) ( 20.0 * argjet3 );
+    ( void ) ( 20.0 + argjet3 );
+    ( void ) ( 20.0 - argjet3 );
+    ( void ) ( argjet3 -20.0);
+    ( void ) ( 20.0 / argjet3 );
+    ( void ) ( argjet3 / 20.0 );
+    ( void ) ( argjet3 / argjet3);
+    argjet2 /= 10.0;
+    //ScalarCostFunctor_quadric scf;
+    //scf( &argjet , &resjet );
+}
+
 int main( int argc , char** argv )
 {
     //GFLAGS_NAMESPACE::ParseCommandLineFlags( &argc , &argv , true );
@@ -86,7 +115,8 @@ int main( int argc , char** argv )
     //absl::ParseFlag( &argc , &argv , true );
     absl::InitializeLog( );
 //    quadric_pass( );
-    quadric_EigenPass( );
+    //quadric_EigenPass( );
     //check_eigen_ctors( );
+    jet_tryout( );
     return 0;
 }
