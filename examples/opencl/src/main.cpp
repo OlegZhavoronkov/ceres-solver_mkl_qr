@@ -5,7 +5,7 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <opencl_jet/graph_node.h>
-
+#include <array>
 using namespace opencl_jet;
 
 constexpr const double a3 = 10;
@@ -39,8 +39,33 @@ void quadric_pass( )
     {
         func( &data( 0 , i ) , &data( 1 , i ) );
     }
-    OpenCLGraphNode<double> node , res;
+    OpenCLGraph graph;
+    OpenCLGraphNode<double> node(&graph) , res(&graph);
     func( &node , &res );
+}
+
+template<typename T> using TracedEigenVector = Eigen::Matrix< OpenCLGraphNode< T > , 3 , 1>;
+
+void check_eigen_ctors()
+{
+    OpenCLGraph graph;
+    OpenCLGraphNode<double> node( &graph ) , res( &graph );
+    OpenCLGraphNode<double> node1( 0 );
+    OpenCLGraphNode<int> node2( 0 );
+}
+
+void quadric_EigenPass( )
+{
+    int cols = 10;
+    
+    EigenScalarCtorWorkaround arg( 0 );
+    
+    //OpenCLGraphNode<double>
+    //ScalarCostFunctor_quadric func = {};
+    OpenCLGraph graph;
+    std::array<OpenCLGraphNode<double>,3  > arr( { OpenCLGraphNode<double>{&graph,0},OpenCLGraphNode<double>{&graph,0},OpenCLGraphNode<double>{&graph,0} } );
+    TracedEigenVector<double> vec = TracedEigenVector<double>::Map( arr.data( ) );
+    auto res = vec.dot( vec );
 }
 
 int main( int argc , char** argv )
@@ -49,6 +74,8 @@ int main( int argc , char** argv )
     absl::ParseCommandLine(argc, argv);
     //absl::ParseFlag( &argc , &argv , true );
     absl::InitializeLog( );
-    quadric_pass( );
+//    quadric_pass( );
+    quadric_EigenPass( );
+    //check_eigen_ctors( );
     return 0;
 }

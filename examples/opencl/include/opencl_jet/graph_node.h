@@ -2,8 +2,35 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <opencl_jet/graph.h>
+#include <type_traits>
 namespace opencl_jet
 {
+
+class EigenScalarCtorWorkaround
+{
+public:
+    //EigenScalarCtorWorkaround( ) = delete;
+    EigenScalarCtorWorkaround( int val )
+        : _val( val )
+    {
+        //fmt::print( "{0} val {1}\n" , __PRETTY_FUNCTION__ , val );
+    }
+    EigenScalarCtorWorkaround( ) = delete;
+    EigenScalarCtorWorkaround( const EigenScalarCtorWorkaround& ) = delete;
+    EigenScalarCtorWorkaround& operator=( const EigenScalarCtorWorkaround& ) = delete;
+    //EigenScalarCtorWorkaround& operator=( const int& val )
+    //{
+    //    fmt::print( "{0} val {1}\n" , __PRETTY_FUNCTION__ , val );
+    //    _val = val;
+    //    return *this;
+    //}
+    //explicit operator int( )
+    //{
+    //    return _val;
+    //}
+//private:
+    int _val;
+};
 
 
 
@@ -12,19 +39,50 @@ template<typename ScalarType> class OpenCLGraphNode
 public:
     using ThisType = OpenCLGraphNode<ScalarType>;
 public:
-    OpenCLGraphNode( ScalarType val = {} )
+    OpenCLGraphNode( )
+        : OpenCLGraphNode(ScalarType{0})
+    { }
+    OpenCLGraphNode(
+        std::conditional_t< !std::is_same_v<ScalarType , int > , int, EigenScalarCtorWorkaround&& > from_zero_initializer
+    )
+        : _val{} ,
+            _pGraph( nullptr ) ,
+            _graphIdx(-1)
+    {
+        //fmt::print( "{0} {1}\n" , __PRETTY_FUNCTION__ , _val );
+    }
+    OpenCLGraphNode( ScalarType val  )
         :   _val(val),
         _pGraph( nullptr ) ,
         _graphIdx(-1)
-    { }
+    {
+        //fmt::print( "{0} {1}\n" , __PRETTY_FUNCTION__ , _val );
+    }
     OpenCLGraphNode( OpenCLGraph* pGraph , ScalarType val = {} )
         :   _val( val ) ,
             _pGraph( pGraph ) ,
             _graphIdx(pGraph!=nullptr ? pGraph->NewId() : -1)
     { }
 
-    OpenCLGraphNode( const OpenCLGraphNode& ) = delete;
-    OpenCLGraphNode& operator=( const OpenCLGraphNode& ) = delete;
+    OpenCLGraphNode( const OpenCLGraphNode& src )
+        :   _val( src._val ) ,
+            _pGraph( src._pGraph ) ,
+            _graphIdx( src._pGraph != nullptr ? src._pGraph->NewId() : -1 )
+    {
+        MakeUnaryExpression( src , "=" );
+    }
+
+    OpenCLGraphNode& operator=( const OpenCLGraphNode& other)
+    {
+        _val = other._val;
+        _pGraph = _pGraph == nullptr ? other._pGraph : _pGraph;
+        if (_graphIdx < 0 && _pGraph != nullptr)
+        {
+            _graphIdx = _pGraph->NewId( );
+        }
+        MakeUnaryExpression( other , "=" );
+        return *this;
+    }
 
     OpenCLGraphNode( OpenCLGraphNode&& other )
         :   _val( std::move( other._val) ) ,
@@ -47,57 +105,63 @@ public:
     //unary operators
     ThisType& operator+=( const ThisType& y )
     {
-        fmt::print( "dd[{0}]+=dd[{1}]\n" , _graphIdx , y._graphIdx );
+        
         _val += y._val;
+        MakeUnaryExpression( y , "+=" );
         return *this;
     }
 
     ThisType& operator-=( const ThisType& y )
     {
-        fmt::print( "dd[{0}]-=dd[{1}]\n" , _graphIdx , y._graphIdx );
         _val -= y._val;
+        MakeUnaryExpression( y , "-=" );
         return *this;
     }
 
     ThisType& operator*=( const ThisType& y )
     {
-        fmt::print( "dd[{0}]*=dd[{1}]\n" , _graphIdx , y._graphIdx );
+        
         _val *= y._val;
+        MakeUnaryExpression( y , "*=" );
         return *this;
     }
 
     ThisType& operator/=( const ThisType& y )
     {
-        fmt::print( "dd[{0}]/=dd[{1}]\n" , _graphIdx , y._graphIdx );
         _val /= y._val;
+        MakeUnaryExpression( y , "/=" );
         return *this;
     }
 
     ThisType& operator+=( const ScalarType& s )
     {
-        fmt::print( "dd[{0}]+={1}\n" , _graphIdx , s );
+        
         _val += s;
+        MakeUnaryExpression( s , "+=" );
         return this;
     }
 
     ThisType& operator-=( const ScalarType& s )
     {
-        fmt::print( "dd[{0}]-={1}\n" , _graphIdx , s );
+        
         _val -= s;
+        MakeUnaryExpression( s , "-=" );
         return *this;
     }
 
     ThisType& operator*=( const ScalarType& s )
     {
-        fmt::print( "dd[{0}]*={1}\n" , _graphIdx , s );
+        
         _val *= s;
+        MakeUnaryExpression( s , "*=" );
         return *this;
     }
 
     ThisType& operator/=( const ScalarType& s )
     {
-        fmt::print( "dd[{0}]/={1}\n" , _graphIdx , s );
+        
         _val /= s;
+        MakeUnaryExpression( s , "/=" );
         return *this;
     }
     //unary +
@@ -109,7 +173,7 @@ public:
     ThisType  operator-( const ThisType& t )
     {
         auto ret = ThisType( t._pGraph , -t._val );
-        fmt::print( "dd[{0}]= -dd[{1}]\n" , ret._graphIdx , t._graphIdx );    
+        MakeUnaryPrefixExpression( t , "-" );
         return ret;
     }
 public:
@@ -132,6 +196,48 @@ private:
     ScalarType _val;
     OpenCLGraph* _pGraph;
     int _graphIdx;
+private:
+    std::string MakeUnaryExpression( const ThisType& other , const std::string& ops )
+    {
+        auto str = fmt::format( "dd[{0}] {1} dd[{2}]" , _graphIdx , ops , other._graphIdx );
+        fmt::print( "{0}\n" , str );
+        return str;
+    }
+
+    template<typename T> std::string MakeUnaryExpression( const T& operand , const std::string& ops )
+    {
+        auto str = fmt::format( "dd[{0}] {1} {2}" , _graphIdx , ops , operand );
+        fmt::print( "{0}\n" , str );
+        return str;
+    }
+
+    std::string MakeUnaryPrefixExpression( const ThisType& from , const std::string& ops = { "-" } )
+    {
+        auto str = fmt::format( "dd[{0}]= -dd[{1}]" , _graphIdx , from._graphIdx );
+        fmt::print( "{0}\n" , str );
+        return str;
+    }
+
+    std::string MakeBinaryExpression( const ThisType& op_l , const ThisType& op_r , const std::string& ops )
+    {
+        auto str = fmt::format( "dd[{0}]= dd[{1}] {2} dd[{3}]" , _graphIdx , op_l._graphIdx ,ops,op_r._graphIdx);
+        fmt::print( "{0}\n" , str );
+        return str;
+    }
+
+    template<typename T> std::string MakeBinaryExpression( const T& op_l , const ThisType& op_r , const std::string& ops )
+    {
+        auto str = fmt::format( "dd[{0}]= {1} {2} dd[{3}]" , _graphIdx , op_l ,ops,op_r._graphIdx);
+        fmt::print( "{0}\n" , str );
+        return str;
+    }
+
+    template<typename T> std::string MakeBinaryExpression(  const ThisType& op_l ,const T& op_r  ,const std::string& ops )
+    {
+        auto str = fmt::format( "dd[{0}]= {1} {2} dd[{3}]" , _graphIdx , op_l._graphIdx ,ops,op_r);
+        fmt::print( "{0}\n" , str );
+        return str;
+    }
 };
 
 
@@ -139,84 +245,108 @@ template <typename T >
 OpenCLGraphNode<T> operator+( const OpenCLGraphNode<T>& f , const OpenCLGraphNode<T>& g )
 {
     auto* pGraph = f._pGraph == nullptr ? g._pGraph : f._pGraph;
-    return OpenCLGraphNode<T>( pGraph , f._val + g._val );
+    OpenCLGraphNode<T> ret( pGraph , f._val + g._val );
+    ret.MakeBinaryExpression( f , g , "+" );
+    return ret;
 }
 
 // Binary + with a scalar: x + s
 template <typename T >
 OpenCLGraphNode<T> operator+( const OpenCLGraphNode<T>& f , T s )
 {
-  return OpenCLGraphNode<T>(f._pGraph ,f._val + s);
+    OpenCLGraphNode<T> ret( f._pGraph , f._val + s );
+    ret.MakeBinaryExpression( f , s , "+" );
+    return ret;
 }
 
 // Binary + with a scalar: s + x
 template <typename T >
 OpenCLGraphNode<T> operator+( T s , const OpenCLGraphNode<T>& f )
 {
-    return OpenCLGraphNode<T>(f._pGraph ,f._val + s);
+    OpenCLGraphNode<T> ret( f._pGraph , f._val + s );
+    ret.MakeBinaryExpression( s , f , "+" );
+    return ret;
 }
 
 template <typename T >
 OpenCLGraphNode<T> operator-( const OpenCLGraphNode<T>& f , const OpenCLGraphNode<T>& g )
 {
     auto* pGraph = f._pGraph == nullptr ? g._pGraph : f._pGraph;
-    return OpenCLGraphNode<T>( pGraph , f._val - g._val );
+    OpenCLGraphNode<T> ret( pGraph , f._val - g._val );
+    ret.MakeBinaryExpression( f , g , "-" );
+    return ret;
 }
 
 // Binary + with a scalar: x + s
 template <typename T >
 OpenCLGraphNode<T> operator-( const OpenCLGraphNode<T>& f , T s )
 {
-  return OpenCLGraphNode<T>(f._pGraph ,f._val - s);
+    OpenCLGraphNode<T> ret( f._pGraph , f._val - s );
+    ret.MakeBinaryExpression( f , s , "-" );
+    return ret;
 }
 
 // Binary + with a scalar: s + x
 template <typename T >
 OpenCLGraphNode<T> operator-( T s , const OpenCLGraphNode<T>& f )
 {
-    return OpenCLGraphNode<T>(f._pGraph ,s-f._val);
+    OpenCLGraphNode<T> ret( f._pGraph , s - f._val );
+    ret.MakeBinaryExpression( s , f , "-" );
+    return ret;
 }
 
 template <typename T >
 OpenCLGraphNode<T> operator*( const OpenCLGraphNode<T>& f , const OpenCLGraphNode<T>& g )
 {
     auto* pGraph = f._pGraph == nullptr ? g._pGraph : f._pGraph;
-    return OpenCLGraphNode<T>( pGraph , f._val * g._val );
+    OpenCLGraphNode<T> ret( pGraph , f._val * g._val );
+    ret.MakeBinaryExpression( f , g , "*" );
+    return ret;
 }
 
 // Binary + with a scalar: x + s
 template <typename T >
 OpenCLGraphNode<T> operator*( const OpenCLGraphNode<T>& f , T s )
 {
-  return OpenCLGraphNode<T>(f._pGraph ,f._val * s);
+    OpenCLGraphNode<T> ret( f._pGraph , f._val * s );
+    ret.MakeBinaryExpression( f , s , "*" );
+    return ret;
 }
 
 // Binary + with a scalar: s + x
 template <typename T >
 OpenCLGraphNode<T> operator*( const T& s , const OpenCLGraphNode<T>& f )
 {
-    return OpenCLGraphNode<T>(f._pGraph ,s*f._val);
+    OpenCLGraphNode<T> ret(f._pGraph ,s*f._val);
+    ret.MakeBinaryExpression( s , f , "*" );
+    return ret;
 }
 
 template <typename T >
 OpenCLGraphNode<T> operator/( const OpenCLGraphNode<T>& f , const OpenCLGraphNode<T>& g )
 {
     auto* pGraph = f._pGraph == nullptr ? g._pGraph : f._pGraph;
-    return OpenCLGraphNode<T>( pGraph , f._val / g._val );
+    OpenCLGraphNode<T> ret( pGraph , f._val / g._val );
+    ret.MakeBinaryExpression( f , g , "/" );
+    return ret;
 }
 
 // Binary + with a scalar: x + s
 template <typename T >
 OpenCLGraphNode<T> operator/( const OpenCLGraphNode<T>& f , T s )
 {
-  return OpenCLGraphNode<T>(f._pGraph ,f._val / s);
+    OpenCLGraphNode<T> ret( f._pGraph , f._val / s );
+    ret.MakeBinaryExpression( f , s , "/" );
+    return ret;
 }
 
 // Binary + with a scalar: s + x
 template <typename T >
 OpenCLGraphNode<T> operator/( T s , const OpenCLGraphNode<T>& f )
 {
-    return OpenCLGraphNode<T>(f._pGraph ,s/f._val);
+    OpenCLGraphNode<T> ret( f._pGraph , s / f._val );
+    ret.MakeBinaryExpression( s , f , "/" );
+    return ret;
 }
 
 
