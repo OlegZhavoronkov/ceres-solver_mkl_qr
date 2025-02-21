@@ -105,13 +105,15 @@ GpuJetHolder::DeriveMatrix GpuJetHolder::RunInternalCPU( clock_t& cpuDuration )
     DeriveMatrix ret = DeriveMatrix::Map( cpu_deriv.get( ) , _points_num , 2 ).eval( );
     return ret;
 }
+namespace
+{
 
 void UsingCeresFunctionForDebug( GpuJetHolder::ScalarType* pData , size_t pointsNum )
 {
     struct LocalFunctor :public VectorToVectorCostFunctor
     {
         LocalFunctor( GpuJetHolder::ScalarType x_ , GpuJetHolder::ScalarType y_ )
-            : x(x_),y(y_)
+            : x( x_ ) , y( y_ )
         { }
         double x , y;
     };
@@ -124,10 +126,10 @@ void UsingCeresFunctionForDebug( GpuJetHolder::ScalarType* pData , size_t points
     std::unique_ptr<GpuJetHolder::ScalarType [ ]> costFunctionsResiduals( new GpuJetHolder::ScalarType[ 4 * pointsNum ] );
     memset( costFunctionsResiduals.get( ) , 0 , pointsNum * 4 * sizeof( GpuJetHolder::ScalarType ) );
     std::unique_ptr<VectorToVectorCostFunctor> pFunctorCPU( new VectorToVectorCostFunctor( ) );
-    std::unique_ptr<CostFunction> pCostFunction( new AutoDiffCostFunction<VectorToVectorCostFunctor , 2 , 2>( &localFunctors[0], ceres::Ownership::DO_NOT_TAKE_OWNERSHIP ) );
+    std::unique_ptr<CostFunction> pCostFunction( new AutoDiffCostFunction<VectorToVectorCostFunctor , 2 , 2>( &localFunctors[ 0 ] , ceres::Ownership::DO_NOT_TAKE_OWNERSHIP ) );
     //pCostFunction->Evaluate()
 }
-
+}
 void GpuJetHolder::RunVector2VectorCPU( )
 {
     using scalarType = decltype( std::declval<JetT>( ).a );
