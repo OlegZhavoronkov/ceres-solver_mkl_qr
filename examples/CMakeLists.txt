@@ -98,7 +98,7 @@ if (HAVE_BIGOBJ)
 endif()
 
 add_executable(more_garbow_hillstrom more_garbow_hillstrom.cc)
-target_link_libraries(more_garbow_hillstrom PRIVATE absl::log_initialize absl::flags absl::flags_parse Ceres::ceres SuiteSparse::CHOLMOD)
+target_link_libraries(more_garbow_hillstrom PRIVATE absl::log_initialize absl::flags absl::flags_parse Ceres::ceres SuiteSparse::CHOLMOD )
 
 add_executable(circle_fit circle_fit.cc)
 target_link_libraries(circle_fit PRIVATE absl::log_initialize absl::flags absl::flags_parse Ceres::ceres SuiteSparse::CHOLMOD)

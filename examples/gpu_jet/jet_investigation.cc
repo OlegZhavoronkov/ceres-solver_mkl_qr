@@ -41,7 +41,7 @@ struct ScalarCostFunctor_2arg
                         ( a2 - a3 ) * x[ 1 ] * x[ 1 ] + ( a3 - a1 ) * x[ 1 ] * x[ 1 ] * x[ 0 ];
         return true;
     }
-    static double derive( const double* xy , double* dfdxdy )
+    static void derive( const double* xy , double* dfdxdy )
     {
         dfdxdy[0]=a3 * 3*xy[ 0 ] * xy[ 0 ]  + a2 *2* xy[ 0 ]  + a1   
             + ( a3 - a1 ) * xy[ 1 ] * xy[ 1 ];
@@ -153,6 +153,7 @@ int main( int argc , char** argv )
     //_2_args_cpu( );
     //_1_args_gpu( );
     //time_measurement_vector2scalar( );
-    _2_args_gpu( );
+    //_2_args_gpu( );
+    _2_args_2res_cpu( );
     return 0;
 }

@@ -132,27 +132,70 @@ void UsingCeresFunctionForDebug( GpuJetHolder::ScalarType* pData , size_t points
 }
 void GpuJetHolder::RunVector2VectorCPU( )
 {
+//    auto analytic_deriv =   [ ] ( const Eigen::Vector2d& p )->Eigen::Vector4d
+//                            {
+//                                Eigen::Vector2d p1=(2*p(0)+sin(p(1)-))
+//                            };
+    //Eigen::Vector2d p( 0.5 , 0.5 );
+    //Eigen::Vector2d center_val;
+    //VectorToVectorCostFunctor cf1;
+    //{
+    //    VectorToVectorCostFunctor cf1;
+    //    cf1( p.data( ) , center_val.data( ) );
+    //    fmt::print( " at [{0:.6f} {1:.6f}] val [{2:.6f} {3:.6f}]\n" , p( 0 ) , p( 1 ) , center_val( 0 ) , center_val( 1 ) );
+    //}
+    VectorToVectorCostFunctor cf1;
+    Eigen::Vector2d p1 = Eigen::Vector2d::Ones( );
+    Eigen::Vector2d center_val;
+    for (const auto& c : { 0.1,0.2,0.3,0.4,0.5 })
+    {
+        Eigen::Vector2d p = ( c * p1 +Eigen::Vector2d(0,0.05)).eval( );
+        cf1( p.data( ) , center_val.data( ) );
+        auto analyticalD = VectorToVectorCostFunctor::AnalyticDiff( p );
+        auto numericalD = VectorToVectorCostFunctor::NumericalDiff( p,1e-5,cf1 );
+        fmt::print( " at [{0:.6f} {1:.6f}] val [{2:.6f} {3:.6f}]\n" , p( 0 ) , p( 1 ) , center_val( 0 ) , center_val( 1 ) );
+        fmt::print( "\tanalytic deriv\t[{0:.6f} {1:.6f}] [{2:.6f} {3:.6f}]\n" , analyticalD( 0 ) , analyticalD( 1 ) , analyticalD( 2 ) , analyticalD( 3 ) );
+        fmt::print( "\tnumeric deriv\t[{0:.6f} {1:.6f}] [{2:.6f} {3:.6f}]\n" , numericalD(0),numericalD(1),numericalD(2),numericalD(3) );
+    }
+
     using scalarType = decltype( std::declval<JetT>( ).a );
     
 
-    std::unique_ptr<scalarType [ ]> cpu_deriv( new scalarType[ 2 * _points_num ] );
+    std::unique_ptr<scalarType [ ]> cpu_deriv( new scalarType[ 2 * 2*_points_num ] );
     auto cpu_start = clock( );
     std::vector<JetT> jet_args( _points_num *2);
     std::vector<JetT> jet_res( _points_num*2 );
     for (size_t i = 0; i < _points_num; i++)
     {
-        jet_args[ 2 * i ] = JetT( _points[ i * 2 ] , 0 );
-        jet_args[ 2 * i + 1 ] = JetT( _points[ i * 2 + 1 ] , 1 );
+        jet_args[ 2 * i ] = JetT( _points[ i * 2 ],0  );
+        jet_args[ 2 * i + 1 ] = JetT( _points[ i * 2 + 1 ],1  );
     }
     VectorToVectorCostFunctor cf;
     for (size_t i = 0; i < _points_num; i++)
     {
-        cf( &jet_args[ 2*i ] , &jet_res[2*i] );
+        Eigen::Vector2d point( jet_args[ 2 * i ].a , jet_args[ 2 * i + 1 ].a );
+        Eigen::Vector2d value;
+        auto analyticalD = VectorToVectorCostFunctor::AnalyticDiff( point );
+        auto numericalD = VectorToVectorCostFunctor::NumericalDiff( point , 1e-5 , cf );
+        cf( &jet_args[ 2 * i ] , &jet_res[ 2 * i ] );
+        cf( point.data( ) , value.data( ) );
+        fmt::print( "at [{0} {1}]\n"
+                    "\tanalytic\t[{2} {3}] [{4} {5}]\n"
+                    "\tjet\t\t[{6} {7}] [{8} {9}] jet value \t[{10} {11}]\n"
+                    "\tnumerical\t[{12} {13}] [{14} {15}] value \t\t[{16} {17}]\n" ,
+                    jet_args[ 2 * i ].a , jet_args[ 2 * i + 1 ].a ,
+                    analyticalD( 0 ) , analyticalD( 1 ) , analyticalD( 2 ) , analyticalD( 3 ) ,
+                    jet_res[ 2 * i ].v( 0 ) , jet_res[ 2 * i ].v( 1 ) , jet_res[ 2 * i + 1 ].v( 0 ) , jet_res[ 2 * i + 1 ].v( 1 ) ,
+                    jet_res[ 2 * i ].a , jet_res[ 2 * i + 1 ].a ,
+                    numericalD( 0 ) , numericalD( 1 ) , numericalD( 2 ) , numericalD( 3 ),value(0),value(1)
+        );
     }
     for (size_t i = 0; i < _points_num; i++)
     {
         cpu_deriv[ 2 * i ] = jet_res[ i ].v[ 0 ];
-        cpu_deriv[ 2*i +1] = jet_res[ i ].v[ 1 ];
+        cpu_deriv[ 2 * i + 1 ] = jet_res[ i + 1 ].v[ 0 ];
+        cpu_deriv[ 2 * i + 2 ] = jet_res[ i ].v[ 1 ];
+        cpu_deriv[ 2 * i + 3 ] = jet_res[ i + 1 ].v[ 1 ];
     }
 }
 
