@@ -28,6 +28,7 @@
 #
 # Author: keir@google.com (Keir Mierle)
 find_package(fmt REQUIRED)
+
 add_executable(helloworld helloworld.cc)
 target_link_libraries(helloworld PRIVATE absl::log_initialize Ceres::ceres SuiteSparse::CHOLMOD)
 
