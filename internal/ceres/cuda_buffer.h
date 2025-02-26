@@ -53,26 +53,35 @@ namespace ceres::internal {
 template <typename T>
 class CudaBuffer {
  public:
-  explicit CudaBuffer(ContextImpl* context) : context_(context) {}
-  CudaBuffer(ContextImpl* context, int size) : context_(context) {
+  explicit CudaBuffer(ContextImpl* context) : context_(context),_own(true) {}
+  CudaBuffer(ContextImpl* context, int size) : context_(context),_own(true) {
     Reserve(size);
   }
 
   CudaBuffer(CudaBuffer&& other)
-      : data_(other.data_), size_(other.size_), context_(other.context_) {
+      : data_(other.data_), size_(other.size_), context_(other.context_),_own(other._own) {
     other.data_ = nullptr;
     other.size_ = 0;
   }
 
-  CudaBuffer(const CudaBuffer&) = delete;
+  
+  CudaBuffer( const CudaBuffer& ) = delete;
   CudaBuffer& operator=(const CudaBuffer&) = delete;
 
   ~CudaBuffer() {
-    if (data_ != nullptr) {
+    if (data_ != nullptr && _own) {
       CHECK_EQ(cudaFree(data_), cudaSuccess);
     }
   }
 
+  template<typename TOther> static std::enable_if_t<!std::is_same_v<T , TOther> , CudaBuffer<T> >  Link( CudaBuffer<TOther>& Other )
+  {
+      CudaBuffer<T> ret( Other.context_ );
+      ret.size_ = ( Other.size_ * sizeof( TOther ) ) / sizeof( T );
+      ret.data_ = reinterpret_cast<T*>(Other.data_);
+      ret._own = false;
+      return std::move( ret );
+  }
   // Grow the GPU memory buffer if needed to accommodate data of the specified
   // size
   void Reserve(const size_t size) {
@@ -162,10 +171,12 @@ class CudaBuffer {
   // allocated so far by this CudaBuffer instance.
   size_t size() const { return size_; }
 
- private:
-  T* data_ = nullptr;
+private:
+    template<typename TT> friend class CudaBuffer;
+    T* data_ = nullptr;
   size_t size_ = 0;
   ContextImpl* context_ = nullptr;
+  bool _own = true;
 };
 
 // This class wraps host memory region allocated via cudaMallocHost. Such memory

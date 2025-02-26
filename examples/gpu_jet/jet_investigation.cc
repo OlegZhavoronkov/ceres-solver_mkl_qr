@@ -142,6 +142,31 @@ void _2_args_2res_cpu( )
     holder.RunVector2VectorCPU( );
 }
 
+
+
+void _2_args_2res_gpu( )
+{
+    using Functor = ceres::examples::internal::VectorToVectorCostFunctor;
+    std::vector<std::unique_ptr<Functor>> functors;
+    size_t functorsNum = 10;
+    functors.reserve( functorsNum );
+    std::unique_ptr<double [ ]> ppoints( new double[ functorsNum * 2 ] );
+    for (size_t n; n < functorsNum; n++)
+    {
+        functors.push_back( std::unique_ptr<Functor>( new Functor( 0.5 ) ) );
+        (ppoints.get())[ n * 2 ] = n * 0.1;
+        (ppoints.get())[ n * 2 +1] = n * 0.1+0.05;
+    }
+    //std::unique_ptr<double [ ]> ppoints( new double[ functorsNum * 2 ] );
+
+    ceres::examples::internal::GpuJetHolder2<Functor , std::integer_sequence<int , 2 , 2>> gph2( std::move( functors ) );
+    gph2.FillData( std::move( ppoints ) , functorsNum * 2 );
+    gph2.Run( );
+    //ceres::examples::internal::GpuJetHolder holder( 10000 );
+    //holder.FillData( );
+    //holder.RunVector2VectorCPU( );
+}
+
 int main( int argc , char** argv )
 {
     //GFLAGS_NAMESPACE::ParseCommandLineFlags( &argc , &argv , true );
@@ -154,6 +179,6 @@ int main( int argc , char** argv )
     //_1_args_gpu( );
     //time_measurement_vector2scalar( );
     //_2_args_gpu( );
-    _2_args_2res_cpu( );
+    _2_args_2res_gpu( );
     return 0;
 }

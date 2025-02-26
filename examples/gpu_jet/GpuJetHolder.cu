@@ -57,4 +57,35 @@ void GpuJetHolder::RunInternalGPUWithSettings(clock_t& gpu_dur,unsigned int pper
     //}
 }
 
+ template<typename Functor,typename Scalar,int N> __global__ void KernelTyped( const unsigned char* pData , unsigned char* derive , unsigned int NumPoints,ceres::Jet<Scalar,N>* pJets,unsigned int pperthread,Functor* )
+{
+    const unsigned int currThreadIdx = threadIdx.x + blockDim.x * blockIdx.x;
+    if (currThreadIdx * pperthread >= NumPoints + pperthread)
+    {
+        return;
+    }
+    //for(unsigned int i=0;i<pperthread;i++)
+    //{
+    //    unsigned int pIdx = currThreadIdx*pperthread+i;
+    //    if (pIdx >= NumPoints)
+    //    {
+    //        return;
+    //    }
+    //    GpuJetHolder::JetT* jetArg = pJets + pIdx * 2;
+    //    jetArg[ 0 ] = GpuJetHolder::JetT( pData[ pIdx * 2 ] , 0 );
+    //    jetArg[ 1 ] = GpuJetHolder::JetT( pData[ pIdx * 2 + 1 ] , 1 );
+    //    GpuJetHolder::JetT res;
+    //    Functor( jetArg , &res );
+    //    derive[ pIdx * 2 ] = res.v[ 0 ];
+    //    derive[ pIdx * 2 +1] = res.v[ 1 ];
+    //}
+    
+    
+}
+
+template<> void GpuJetHolder2Root::RunKernel<VectorToVectorCostFunctor>( )
+{
+    KernelTyped << <1 , 1 >> > ( nullptr , nullptr , 0,(ceres::Jet<double,2>*)nullptr,1,(VectorToVectorCostFunctor*)nullptr );
+}
+
 }

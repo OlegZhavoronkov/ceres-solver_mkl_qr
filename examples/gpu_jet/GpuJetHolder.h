@@ -64,9 +64,13 @@ struct VectorScalarCostFunctor
 
 struct VectorToVectorCostFunctor
 {
-    constexpr static const double r = 10;
-    constexpr static const double a = 0.5;
+    //constexpr static const double r = 10;
+    const  double _a = 0.5;
+    VectorToVectorCostFunctor(const double& a)
+        : _a(a)
+    {
 
+    }
     template<typename T>
     JET_CUDA_DEVICE_HOST inline
     bool operator()( const T* const x , T* residual ) const
@@ -82,14 +86,14 @@ struct VectorToVectorCostFunctor
 
         */
 
-        residual[ 0 ] = x[ 0 ] * x[ 0 ] + sin( x[ 1 ] - a * x[ 0 ] );
-        residual[ 1 ] = x[ 1 ] * x[ 0 ] + cos( x[ 1 ] - a * x[ 0 ] );
+        residual[ 0 ] = x[ 0 ] * x[ 0 ] + sin( x[ 1 ] - _a * x[ 0 ] );
+        residual[ 1 ] = x[ 1 ] * x[ 0 ] + cos( x[ 1 ] - _a * x[ 0 ] );
 //        residual[ 0 ] = a3 * x[ 0 ];
         //printf( "functor 2\n" );
         return true;
     }
 
-    static Eigen::Vector4d AnalyticDiff( const Eigen::Vector2d& p )
+    static Eigen::Vector4d AnalyticDiff( const Eigen::Vector2d& p,double a )
     {
         Eigen::Vector2d v1( 2 * p( 0 ) - a * cos( p( 1 ) - a * p( 0 ) ) ,p(1)+ a * sin( p( 1 ) - a * p( 0 ) ) );
         Eigen::Vector2d v2(  cos( p( 1 ) - a * p( 0 ) ) , p( 0 ) - sin( p( 1 ) - a * p( 0 ) ) );
@@ -175,20 +179,115 @@ template<int NumOfOutputs , int...NumOfInputs> struct IndexesHolder<NumOfOutputs
 
 template<typename,typename > class GpuJetHolder2;
 
+class GpuJetHolder2Root
+{
+public:
+    GpuJetHolder2Root( ceres::internal::ContextImpl* pImpl );
+protected:
+    void InitFunctorBufferOnGPU( size_t object_size , size_t objects_num );
+    void InitPointsBufferOnGpu( size_t pointsNum , size_t pointSize );
+    void TransferPointsToGpu( const unsigned char* ppoints , size_t  numPoints , size_t pointsize );
+    template<typename Functor> void RunKernel( );
+protected:
+    ceres::internal::ContextImpl* _pImpl;
+    using CudaBufferRaw = ceres::internal::CudaBuffer<unsigned char>;
+    std::unique_ptr<CudaBufferRaw> _pCudaFunctorBufferRaw;
+    std::unique_ptr<CudaBufferRaw> _pCudaPointsBufferRaw;
+    std::unique_ptr<unsigned char [ ]> _pPointsBufferRaw;
+};
 
 
 template<typename Functor, int NumOfOutputs , int...NumOfInputs> class GpuJetHolder2<Functor,std::integer_sequence<int , NumOfOutputs , NumOfInputs...> >
-    : public std::enable_if_t < (sizeof...( NumOfInputs ) > 0) , IndexesHolder<NumOfOutputs , std::integer_sequence<int , NumOfInputs...> > >
+    :   public std::enable_if_t < (sizeof...( NumOfInputs ) > 0) , IndexesHolder<NumOfOutputs , std::integer_sequence<int , NumOfInputs...> > >,
+        public GpuJetHolder2Root
 {
     using IdxsHolder = IndexesHolder<NumOfOutputs , std::integer_sequence<int , NumOfInputs...> >;
 public:
-    GpuJetHolder2(std::vector<std::unique_ptr<Functor>>&& functors)
-    {
+    using ceresJetT = ceres::Jet < double , IdxsHolder::Dimensions>;
+    using ScalarType = ceres::internal::UnderlyingScalar_t<ceresJetT>;
 
-    }
-private:
     
-};
+    using CudaJetBuffer = ceres::internal::CudaBuffer<ceresJetT>;
+public:
+    GpuJetHolder2( std::vector<std::unique_ptr<Functor>>&& functors,ceres::internal::ContextImpl* pImpl=nullptr )
+        : GpuJetHolder2Root(pImpl)
+        , _NumPoints(IdxsHolder::NumOfInJets*functors.size())
+        , _functors( std::forward<std::vector<std::unique_ptr<Functor>>&&>(functors) )
+    {
+        _points.reset( new ScalarType[ _NumPoints ] );
+        //_pCudaFunctorBuffer.reset( new CudaFunctorBuffer() )
+    }
+    void FillData( std::unique_ptr<ScalarType [ ]>&& pointsData,size_t num )
+    {
+        if(num!=_NumPoints)
+        {
+            throw std::runtime_error( "num!=_NumPoints" );
+        }
+        _points = std::forward<std::unique_ptr<ScalarType [ ]>&&>( pointsData );
+        
+    }
+    void FillData( const double* p,size_t num )
+    {
+        if(num>_NumPoints)
+        {
+            throw std::runtime_error( "num>_NumPoints" );
+        }
+        double *pIn = const_cast<double*>( p);
+        double *pSrc = _points.get();
+        for (size_t n = 0; n < num; pIn++ , pSrc++)
+        {
+            *pSrc = *pIn;
+        }
+    }
+    void Run()
+    {
+       
+        if (!_pCudaFunctorBuffer)
+        {
+            InitFunctorBufferOnGPU( sizeof( Functor ) , _functors.size( ) );
+            auto linkedBuff = CudaFunctorBuffer::Link( *_pCudaFunctorBufferRaw );
+            _pCudaFunctorBuffer.reset( new CudaFunctorBuffer( std::move(linkedBuff) ) );
+                
+        }
+        if (!_pCudaPointsBuffer)
+        {
+            InitPointsBufferOnGpu( _NumPoints , sizeof( ScalarType ) );
+            _pCudaPointsBuffer.reset( new CudaScalarTypeBuffer( CudaScalarTypeBuffer::Link( *_pCudaPointsBufferRaw ) ) );
+            TransferPointsToGpu(reinterpret_cast<unsigned char*>( _points.get()), _NumPoints , sizeof( ScalarType ));
+        }
+        if (_pCudaFunctorBuffer)
+        {
+            size_t functorsBuffSize = _functors.size( ) * sizeof( Functor );
+            std::unique_ptr<unsigned char [ ]> pTempBuffer( new unsigned char[ functorsBuffSize ] );
+            unsigned char* pFuncRaw = pTempBuffer.get( );
+            for (int n = 0; n < _functors.size( ); n++,pFuncRaw += sizeof(Functor))
+            {
+                memcpy( pFuncRaw , _functors.at( n ).get( ) , sizeof( Functor ) );
+            }
+
+            _pCudaFunctorBuffer->CopyFromCpu( reinterpret_cast<Functor*>( pTempBuffer.get( )) , _functors.size( ) );
+        }
+        RunKernel<Functor>( );
+    }
+
+    void ExtractDerives( double* pOut , size_t num );
+protected:
+
+    const size_t _NumPoints = IdxsHolder::NumOfInJets;
+    using CudaFunctorBuffer = ceres::internal::CudaBuffer<Functor>;
+    using CudaScalarTypeBuffer = ceres::internal::CudaBuffer< ScalarType >;
+    size_t _points_num;
+    //std::unique_ptr<CudaJetBuffer> _pCudaJetBuffer;
+    std::unique_ptr< ScalarType [ ]> _points;
+    //std::unique_ptr< ScalarType [ ]> _derives;
+    std::unique_ptr<CudaJetBuffer> _pCudaBuffer;
+    std::unique_ptr<CudaFunctorBuffer> _pCudaFunctorBuffer;
+    std::unique_ptr<CudaScalarTypeBuffer> _pCudaPointsBuffer;
+    //std::unique_ptr<>
+    //std::unique_ptr<CudaFloatBuffer> _devPoints;
+    std::vector<std::unique_ptr<Functor>> _functors;
+    //std::unique_ptr<CudaFloatBuffer> _devDerives;
+    };
 
 
 }

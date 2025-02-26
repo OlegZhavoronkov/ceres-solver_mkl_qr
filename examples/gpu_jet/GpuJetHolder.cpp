@@ -113,7 +113,7 @@ void UsingCeresFunctionForDebug( GpuJetHolder::ScalarType* pData , size_t points
     struct LocalFunctor :public VectorToVectorCostFunctor
     {
         LocalFunctor( GpuJetHolder::ScalarType x_ , GpuJetHolder::ScalarType y_ )
-            : x( x_ ) , y( y_ )
+            : VectorToVectorCostFunctor(0.5),x( x_ ) , y( y_ )
         { }
         double x , y;
     };
@@ -125,7 +125,7 @@ void UsingCeresFunctionForDebug( GpuJetHolder::ScalarType* pData , size_t points
     }
     std::unique_ptr<GpuJetHolder::ScalarType [ ]> costFunctionsResiduals( new GpuJetHolder::ScalarType[ 4 * pointsNum ] );
     memset( costFunctionsResiduals.get( ) , 0 , pointsNum * 4 * sizeof( GpuJetHolder::ScalarType ) );
-    std::unique_ptr<VectorToVectorCostFunctor> pFunctorCPU( new VectorToVectorCostFunctor( ) );
+    std::unique_ptr<VectorToVectorCostFunctor> pFunctorCPU( new VectorToVectorCostFunctor( 0.5) );
     std::unique_ptr<CostFunction> pCostFunction( new AutoDiffCostFunction<VectorToVectorCostFunctor , 2 , 2>( &localFunctors[ 0 ] , ceres::Ownership::DO_NOT_TAKE_OWNERSHIP ) );
     //pCostFunction->Evaluate()
 }
@@ -144,14 +144,14 @@ void GpuJetHolder::RunVector2VectorCPU( )
     //    cf1( p.data( ) , center_val.data( ) );
     //    fmt::print( " at [{0:.6f} {1:.6f}] val [{2:.6f} {3:.6f}]\n" , p( 0 ) , p( 1 ) , center_val( 0 ) , center_val( 1 ) );
     //}
-    VectorToVectorCostFunctor cf1;
+    VectorToVectorCostFunctor cf1(0.5);
     Eigen::Vector2d p1 = Eigen::Vector2d::Ones( );
     Eigen::Vector2d center_val;
     for (const auto& c : { 0.1,0.2,0.3,0.4,0.5 })
     {
         Eigen::Vector2d p = ( c * p1 +Eigen::Vector2d(0,0.05)).eval( );
         cf1( p.data( ) , center_val.data( ) );
-        auto analyticalD = VectorToVectorCostFunctor::AnalyticDiff( p );
+        auto analyticalD = VectorToVectorCostFunctor::AnalyticDiff( p ,0.5);
         auto numericalD = VectorToVectorCostFunctor::NumericalDiff( p,1e-5,cf1 );
         fmt::print( " at [{0:.6f} {1:.6f}] val [{2:.6f} {3:.6f}]\n" , p( 0 ) , p( 1 ) , center_val( 0 ) , center_val( 1 ) );
         fmt::print( "\tanalytic deriv\t[{0:.6f} {1:.6f}] [{2:.6f} {3:.6f}]\n" , analyticalD( 0 ) , analyticalD( 1 ) , analyticalD( 2 ) , analyticalD( 3 ) );
@@ -170,12 +170,12 @@ void GpuJetHolder::RunVector2VectorCPU( )
         jet_args[ 2 * i ] = JetT( _points[ i * 2 ],0  );
         jet_args[ 2 * i + 1 ] = JetT( _points[ i * 2 + 1 ],1  );
     }
-    VectorToVectorCostFunctor cf;
+    VectorToVectorCostFunctor cf(0.5);
     for (size_t i = 0; i < _points_num; i++)
     {
         Eigen::Vector2d point( jet_args[ 2 * i ].a , jet_args[ 2 * i + 1 ].a );
         Eigen::Vector2d value;
-        auto analyticalD = VectorToVectorCostFunctor::AnalyticDiff( point );
+        auto analyticalD = VectorToVectorCostFunctor::AnalyticDiff( point,0.5 );
         auto numericalD = VectorToVectorCostFunctor::NumericalDiff( point , 1e-5 , cf );
         cf( &jet_args[ 2 * i ] , &jet_res[ 2 * i ] );
         cf( point.data( ) , value.data( ) );
@@ -231,5 +231,25 @@ void GpuJetHolder::RunInternalGPU( clock_t& gpuDuration )
     gpuDuration = static_cast<clock_t>(min_clock_float);
     fmt::print( "best time {} msec pperthread {} numThreads {}\n" , ( min_clock_float * 1000.0 ) / CLOCKS_PER_SEC , best_time_ppthread , best_time_numThreads );
 }
+
+GpuJetHolder2Root::GpuJetHolder2Root( ceres::internal::ContextImpl* pImpl )
+        : _pImpl(pImpl == nullptr ? Context.get(): pImpl)
+{
+}
+
+void GpuJetHolder2Root::InitFunctorBufferOnGPU( size_t object_size , size_t objects_num )
+    {
+        _pCudaFunctorBufferRaw.reset( new CudaBufferRaw( _pImpl , objects_num * object_size ) );
+    }
+    void GpuJetHolder2Root::InitPointsBufferOnGpu( size_t pointsNum , size_t pointSize )
+    {
+        _pCudaPointsBufferRaw.reset( new CudaBufferRaw( _pImpl , pointsNum * pointSize ) );
+        _pPointsBufferRaw.reset( new unsigned char[ pointsNum * pointSize ] );
+    }
+    void GpuJetHolder2Root::TransferPointsToGpu(const unsigned char* ppoints,size_t  numPoints , size_t pointsize)
+    {
+        _pCudaFunctorBufferRaw->CopyFromCpu( ppoints , numPoints * pointsize );
+
+    }
 
 }
